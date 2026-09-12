@@ -547,10 +547,8 @@ because no core endpoint exists for it.
 - [ ] `schema-parity-baseline.json`: 486 findings, none ever burned down (240
       columns missing from the spec, 201 unspecced tables).
 - [ ] `charitable-donation-accounts` is disabled in the policies manifest yet
-      ships a live catalogue and dashboard page; the six `CG-*` runtime gate
-      rows render with no evidence attached; two dashboard views
-      (`compliance/dashboard/choreography/index.html` and a one-off BSA
-      preview) are published on Pages but unreachable from any nav.
+      ships a live catalogue and a monitoring page; the six `CG-*` runtime gate
+      rows render with no evidence attached.
 - [ ] [STATUS.md](STATUS.md) is the single worst doc: months stale, rows for
       three of the 27 policies, and excluded from the doc gate so nothing will
       ever catch it.

@@ -21,7 +21,7 @@ if [ -f .env.local ]; then set -a; source .env.local; set +a; fi
 : "${SUPABASE_DB_URL:?SUPABASE_DB_URL not set in .env.local}"
 
 API="${API_BASE:-https://jynsipdvrgqdkeqrlzcv.functions.supabase.co/api}"
-DASH="${DASH_URL:-https://cassandra-labs-foundation.github.io/cassandra-platform/dashboard/}"
+DASH="${DASH_URL:-https://cassandra-platform.vercel.app/compliance/dashboard}"
 AUTH=(-H "X-Api-Key: ${DEMO_API_KEY}" -H "content-type: application/json")
 RUN="demo-$(date +%s)"
 PACE="${PACE:-1.2}"

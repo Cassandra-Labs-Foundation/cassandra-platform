@@ -40,10 +40,10 @@ or CI secrets needed.
 5. (If it ever holds real data) **Settings → Deployment Protection →** enable
    password or SSO.
 
-The public URL Vercel gives you is what the core's `/compliance/dashboard`
-redirect should point at once the standalone dashboard is retired — set
-`DASHBOARD_SHELL_URL` on the core to `<vercel-url>/compliance/dashboard` (the
-default still points at the GitHub-Pages standalone until then).
+The core's `GET /compliance/dashboard` already 302s to this deployment's
+`/compliance/dashboard` (the `DEFAULT_SHELL_URL` default in
+`core/supabase/functions/api/dashboard.ts`). Set `DASHBOARD_SHELL_URL` on the
+core to override it — e.g. a preview deploy or a custom domain.
 
 ## Any Node host (Fly, Render, Railway, a container)
 

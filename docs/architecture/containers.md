@@ -10,8 +10,8 @@ flowchart TB
     partner["Partner fintech"]
     officer["Compliance officer / examiner"]
 
-    subgraph vercelish [Staff console — Next.js]
-        pages["Browser pages<br/><i>teller, accounting, compliance,<br/>approvals, call report…</i>"]
+    subgraph vercelish [Staff console — Next.js on Vercel]
+        pages["Browser pages<br/><i>teller, accounting, compliance monitoring,<br/>approvals, call report…</i>"]
         proxy["Server-side proxy<br/><i>read-only, GET-only,<br/>allowlist from the spec</i>"]
     end
 
@@ -24,10 +24,6 @@ flowchart TB
     end
 
     blnk["Blnk Cloud<br/><i>double-entry ledger,<br/>source of truth for balances</i>"]
-
-    subgraph ghp [GitHub Pages]
-        dash["Compliance dashboard<br/><i>static, generated per policy,<br/>public by demo posture</i>"]
-    end
 
     subgraph gha [GitHub Actions]
         gates["Gates + generators<br/><i>rebuild_artifacts.sh and the<br/>parity/coverage/doc checks</i>"]
@@ -46,10 +42,10 @@ flowchart TB
     recon --> pg
     agg --> pg
     drill --> pg
-    officer --> dash
-    api -->|"302 /compliance/dashboard"| dash
+    officer --> pages
+    api -->|"302 /compliance/dashboard"| pages
     analytics --> pg
-    gates -->|"regenerate + verify artifacts"| dash
+    gates -->|"regenerate + verify artifacts"| proxy
 ```
 
 ## The containers, one line each
@@ -60,8 +56,7 @@ flowchart TB
 | **Postgres** | Supabase | `core.*` schema generated from controls + spec; the event log; `control_result` evidence rows | `core/supabase/migrations/` |
 | **Blnk ledger** | Blnk Cloud (external SaaS) | double-entry source of truth for balances; core keeps cached mirrors | `core/supabase/functions/blnk-reconcile/` |
 | **Aggregator** | Deno edge function | the one cross-fintech view (instance-per-partner everywhere else) | `core/supabase/functions/aggregator/` |
-| **Staff console** | Next.js (Pages Router) | staff screens; a **read-only server-side proxy** is the only path to the core, allowlisted from the spec | `ui/src/` |
-| **Compliance dashboard** | static site, GitHub Pages | per-policy evidence pages + the money-movement-gate view + the choreography explorer, all generated | `compliance/dashboard/` |
+| **Staff console** | Next.js (Pages Router), on Vercel | staff screens incl. **compliance monitoring** (the per-policy control dashboard + the money-movement-gate view); a **read-only server-side proxy** is the only path to the core, allowlisted from the spec | `ui/src/` |
 | **Analytics** | DuckDB + shell, scheduled | event archive sweep, NCUA 5300 and BSA reporters | `analytics/` |
 | **Policy corpus** | markdown + LLM workflow | one folder per policy: `prompt.md` (input) → `{slug}.md` (authored prose with control blocks) | `compliance/policies/` |
 | **Drill harness** | Deno, two backends | fires every control's trigger, asserts its produced events — against a fake DB and against the real one | `core/supabase/functions/drill/` |

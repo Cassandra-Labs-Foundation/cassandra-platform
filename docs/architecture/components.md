@@ -84,7 +84,7 @@ flowchart TB
     policies["compliance/policies/*/{slug}.md"] --> ec["extract_controls.py"] --> controls["controls.json"]
     vocab --> controls
     controls --> bx["build_crosswalk.py"] --> xw["crosswalk.json + CROSSWALK.md"]
-    controls --> bd["build_dashboard.py"] --> dash["compliance/dashboard/"]
+    controls --> bd["build_dashboard.py"] --> dash["ui/public/compliance-manifest.json"]
     spec --> en["verifier/generator/enumerate.py"] --> targets["targets.json + worklist.md"]
     spec --> gr["gen_routes.py"] --> routes["api/routes.gen.ts"]
     spec --> guc["gen_ui_contract.py"] --> uic["ui allowlist + types"]
@@ -97,7 +97,7 @@ flowchart TB
 
 | kind | scripts | goes red when |
 |---|---|---|
-| **generators** | `parse_core_api.py`, `extract_controls.py`, `build_control_vocabulary.py`, `extract_vocab.py`, `build_crosswalk.py`, `build_dashboard.py`, `build_choreography.py`, `gen_routes.py`, `gen_ui_contract.py`, `gen_state.py`, `core/verifier/generator/enumerate.py` | never — they overwrite; drift shows up in the gates |
+| **generators** | `parse_core_api.py`, `extract_controls.py`, `build_control_vocabulary.py`, `extract_vocab.py`, `build_crosswalk.py`, `build_dashboard.py`, `gen_routes.py`, `gen_ui_contract.py`, `gen_state.py`, `core/verifier/generator/enumerate.py` | never — they overwrite; drift shows up in the gates |
 | **gates** | `check_route_parity.py`, `check_schema_parity.py`, `check_emitted_coverage.py`, `check_vocab_drift.py`, `check_vocab_refs.py`, `check_decision_refs.py`, `check_doc_claims.py` | an implementation, artifact, or document disagrees with the spec/policies |
 
 The verifier (`core/verifier/`) enumerates black-box test targets from the

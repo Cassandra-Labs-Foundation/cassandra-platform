@@ -3,7 +3,7 @@
     "spec_title": "Cassandra Banking Core API",
     "spec_version": "3.2.0",
     "parser_version": "0.2.0",
-    "parsed_at": "2026-09-12T18:49:13.644394Z",
+    "parsed_at": "2026-09-12T22:21:40.229814Z",
     "note": "Specific domain codes (e.g. sar.filed, vendor_review) live as `subject` values in vocab-migration.json, not as distinct vocabulary elements.",
     "sources": [
       "core-api.yaml",

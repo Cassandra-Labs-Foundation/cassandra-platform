@@ -114,10 +114,15 @@ red — usually "no writer" for a noun the core does not model yet.
 
 ## Dashboard
 
-`compliance/dashboard/` renders the catalogue and its evidence: per-policy pages generated from
-`controls.json`, plus a synthetic `money-movement-gate` view that cuts across policies. Hosted
-on GitHub Pages because the Supabase gateway rewrites renderable content types on shared
-domains.
+Compliance monitoring lives in the staff console (`ui/`) at `/compliance/dashboard`: per-policy
+control lists and, per control, its heartbeat and raw event history, read from the core through
+the UI's read-only proxy. The catalogue it renders is `ui/public/compliance-manifest.json`,
+generated from `controls.json` by `scripts/build_dashboard.py` (plus a synthetic
+`money-movement-gate` view that cuts across policies). The console is deployed on Vercel, and the
+API's `GET /compliance/dashboard` 302s there.
+
+Until 2026-09 this was a standalone GitHub-Pages site; it was retired when the dashboard became
+native in the UI.
 
 **Demo posture:** the data route is public and the evidence is synthetic. The `provenance`
 column (`production` / `demo` / `unknown`) is what keeps synthetic rows from being mistaken for

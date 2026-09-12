@@ -1,31 +1,22 @@
-# Publish the compliance dashboard to GitHub Pages.
+# Publish the architecture tour to GitHub Pages.
 #
-# Pages can only serve from the repo root or a directory literally named
-# `docs/`. The dashboard now lives at compliance/dashboard/, which is neither,
-# so the old "deploy from branch" source cannot see it — this workflow replaces
-# it (repo Pages source switched from `legacy` to `workflow`).
+# Until 2026-09 this also published the standalone compliance dashboard
+# (compliance/dashboard/). That dashboard is now native in the banking UI, and
+# the API's /compliance/dashboard route redirects to the deployed console, so
+# only the architecture tour remains on Pages.
 #
-# The staging step is what keeps the public URL unchanged. Uploading
-# compliance/dashboard/ directly would serve it at the site ROOT, moving the
-# dashboard from /cassandra-platform/dashboard/ to /cassandra-platform/ and
-# breaking every link in docs/demo-runbook.md, the API's /compliance/dashboard redirect and
-# the e2e smoke test. Staging it one level down preserves the old path exactly.
-#
-# It also publishes ONLY the dashboard and the architecture tour. Pointing
-# Pages at compliance/ wholesale would publish the 27 policy folders as a
-# website too — they are already public on GitHub, but that is a different
-# thing from hosting them.
-#
-# /architecture/ is docs/architecture/ verbatim: index.html is a client-side
-# VIEW that fetches and renders the sibling markdown, so the published site
-# can never drift from the files in the repo.
+# Pages serves from a `workflow` source (not "deploy from branch"): this job
+# stages the files under _site and uploads that. docs/pages-root.html becomes
+# the site index so the bare URL routes instead of 404ing, and /architecture/
+# is docs/architecture/ verbatim — its index.html is a client-side VIEW that
+# fetches and renders the sibling markdown, so the published site can never
+# drift from the files in the repo.
 name: pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "compliance/dashboard/**"
       - "docs/architecture/**"
       - "docs/pages-root.html"
       - ".github/workflows/pages.yml"
@@ -51,17 +42,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Stage the dashboard and the architecture tour one level down
+      - name: Stage the architecture tour one level down
         run: |
           set -euo pipefail
-          mkdir -p _site/dashboard _site/architecture
-          cp -R compliance/dashboard/. _site/dashboard/
+          mkdir -p _site/architecture
           cp docs/architecture/index.html docs/architecture/*.md _site/architecture/
           cp docs/pages-root.html _site/index.html   # the bare URL routes, not 404s
           # Fail loudly rather than deploying an empty site.
           test -f _site/index.html
-          test -f _site/dashboard/index.html
-          test -f _site/dashboard/assets/app.js
           test -f _site/architecture/index.html
           test -f _site/architecture/README.md
           echo "staged $(find _site -type f | wc -l) files"

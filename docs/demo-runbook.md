@@ -93,9 +93,11 @@ posture.
 
 | | |
 |---|---|
-| Dashboard | https://cassandra-labs-foundation.github.io/cassandra-platform/dashboard/ |
+| Dashboard | https://cassandra-platform.vercel.app/compliance/dashboard |
 | Same, via the API | `{API}/compliance/dashboard` (302s to the above) |
 | API base | https://jynsipdvrgqdkeqrlzcv.functions.supabase.co/api |
 
-The dashboard loads with **no credential** — a deliberate demo posture. The
-re-locking recipe is in `core/supabase/functions/api/dashboard.ts`.
+Both the console and the core's data route load with **no credential** — a
+deliberate demo posture (synthetic data). The core data route's re-locking
+recipe is in `core/supabase/functions/api/dashboard.ts`; the console's own
+access can be gated at the host (see `ui/DEPLOY.md`).

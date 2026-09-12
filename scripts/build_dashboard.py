@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""Generate the compliance dashboard's policy hierarchy from controls.json.
+"""Generate the compliance catalogue manifest from controls.json.
 
-The dashboard mirrors the repo's policy structure: one page per policy at
-compliance/dashboard/<slug>/, driven by a manifest generated from the same
-controls.json the crosswalk builds from — so the dashboard can never drift
-from the catalogue without CI noticing.
+The banking UI's compliance monitoring pages (ui/src/pages/compliance/
+dashboard/) render policy -> controls in place, reading this manifest as a
+static asset. It is generated from the same controls.json the crosswalk builds
+from — so the rendered catalogue can never drift from the source without CI
+noticing.
 
-  python3 scripts/build_dashboard.py           # regenerate manifest + stubs
-  python3 scripts/build_dashboard.py --check   # fail if anything is stale
+  python3 scripts/build_dashboard.py           # regenerate the manifest
+  python3 scripts/build_dashboard.py --check   # fail if it is stale
 
-Outputs:
-  compliance/dashboard/manifest.json      policy -> controls (id, title, anchor,
-                                    citations, source link)
-  compliance/dashboard/<slug>/index.html  one stub per policy, all identical: they
-                                    load the shared app, which reads the
-                                    policy slug from its own URL.
+Output:
+  ui/public/compliance-manifest.json   policy -> controls (id, title, watch
+                                       codes, citations, test verdicts, prose)
+
+Until 2026-09 this also generated a standalone GitHub-Pages dashboard under
+compliance/dashboard/ (a shared app + one HTML stub per policy). That was
+retired when the dashboard became native in the UI; only the manifest survives,
+and the UI is the one renderer of it now.
 """
 import functools
-import hashlib
 import json
 import pathlib
 import re
@@ -25,7 +27,6 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTROLS = ROOT / "controls.json"
-DASH = ROOT / "compliance" / "dashboard"
 POLICIES = ROOT / "compliance" / "policies"
 
 TITLES = {
@@ -61,35 +62,6 @@ TITLES = {
 REPO_BLOB = (
     "https://github.com/Cassandra-Labs-Foundation/cassandra-platform/blob/main/"
 )
-
-STUB = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cassandra — Compliance</title>
-<link rel="stylesheet" href="../assets/style.css?v={v}">
-</head>
-<body>
-<div id="root"></div>
-<script src="../assets/app.js?v={v}"></script>
-</body>
-</html>
-"""
-
-
-def asset_version() -> str:
-    """Content hash of the shared assets.
-
-    Stamped into every asset URL so a rebuilt app.js can never be shadowed by
-    a cached one. Learned the hard way: the manifest's own no-cache fix was
-    invisible because the SCRIPT that fetches it was the stale thing.
-    """
-    h = hashlib.sha256()
-    for name in ("style.css", "app.js"):
-        h.update((DASH / "assets" / name).read_bytes())
-    return h.hexdigest()[:12]
-
 
 def title_for(slug: str, policy_title: str | None) -> str:
     # the hand-kept map wins: source-doc titles leak internal working names
@@ -298,27 +270,12 @@ def build_manifest() -> dict:
 
 
 def desired_files(manifest: dict) -> dict[pathlib.Path, str]:
-    v = asset_version()
+    # The banking UI's compliance monitoring pages read this manifest as a
+    # static asset (ui/public/compliance-manifest.json). Generated from the same
+    # controls.json the crosswalk builds from, and gated by --check below so the
+    # rendered catalogue can never drift from the source of truth.
     manifest_json = json.dumps(manifest, indent=1) + "\n"
-    files = {DASH / "manifest.json": manifest_json}
-    # The banking UI renders this same catalogue natively (ui/src/pages/
-    # compliance/dashboard/*), reading the manifest as a static asset. Keep a
-    # copy under its public/ dir — generated from the same controls.json, and
-    # gated by --check below so the standalone and in-app dashboards can never
-    # drift to different catalogues.
-    files[ROOT / "ui" / "public" / "compliance-manifest.json"] = manifest_json
-    for p in manifest["policies"]:
-        files[DASH / p["slug"] / "index.html"] = STUB.format(v=v)
-
-    # the index is hand-written (it carries the explanatory header comment),
-    # so its asset URLs are re-stamped in place rather than regenerated
-    index = DASH / "index.html"
-    files[index] = re.sub(
-        r'(assets/(?:style\.css|app\.js))(\?v=[0-9a-f]+)?',
-        lambda m: f"{m.group(1)}?v={v}",
-        index.read_text(),
-    )
-    return files
+    return {ROOT / "ui" / "public" / "compliance-manifest.json": manifest_json}
 
 
 def main() -> int:
@@ -348,12 +305,9 @@ def main() -> int:
         return 0
 
     print(
-        f"wrote manifest + {manifest['policy_count']} policy pages "
-        f"({manifest['control_count']} controls)"
+        f"wrote ui/public/compliance-manifest.json — "
+        f"{manifest['policy_count']} policies, {manifest['control_count']} controls"
     )
-    if stale:
-        for s in stale:
-            print(f"  updated {s}")
     return 0
 
 

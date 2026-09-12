@@ -109,7 +109,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           arts="controls.json control-vocabulary.json core-vocabulary.json extracted-vocab.json
-                crosswalk.json CROSSWALK.md STATE.md compliance/dashboard
+                crosswalk.json CROSSWALK.md STATE.md ui/public/compliance-manifest.json
                 core/verifier/targets.json core/verifier/worklist.md
                 core/core-api.yaml core/supabase/functions/api/routes.gen.ts
                 ui/src/lib/coreApi.allowlist.json ui/src/lib/core-api-types.d.ts

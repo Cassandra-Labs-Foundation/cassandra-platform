@@ -449,27 +449,21 @@ Deno.test("trace: full event chain + gate decisions for one resource, ascending,
   assertEquals(d.control_results.map((c: Row) => c.id), ["cr1"]);
 });
 
-Deno.test("the dashboard route 302s to the hosted shell (the gateway cannot serve HTML)", () => {
+Deno.test("the dashboard route 302s to the deployed console (the gateway cannot serve HTML)", () => {
   const res = getDashboardShell("t");
   assertEquals(res.status, 302);
   assert((res.headers.get("location") ?? "").startsWith("https://"));
 });
 
-Deno.test("the hosted shell carries no credentials at all (demo posture)", async () => {
-  for (const f of ["index.html", "assets/app.js"]) {
-    const src = await Deno.readTextFile(
-      new URL(`../../../../compliance/dashboard/${f}`, import.meta.url),
-    );
-    assert(!src.includes("token="), `${f}: no token may ride in a URL`);
-    assert(!/cass_(?:demo|e2e|pt)_[a-f0-9]/.test(src), `${f}: no live token may be baked in`);
-    assert(!src.includes("X-Api-Key"), `${f}: demo shell sends no auth header at all`);
-  }
-});
-
-Deno.test("the policy hierarchy covers the whole catalogue — every policy, every control, a page each", async () => {
-  const dash = new URL("../../../../compliance/dashboard/", import.meta.url);
+Deno.test("the catalogue manifest covers the whole policy set — every policy, every control, its watch/rules/verdicts", async () => {
+  // The banking UI's compliance monitoring pages render from this manifest;
+  // scripts/build_dashboard.py generates it from controls.json (the same source
+  // the crosswalk builds from), so a control missing here is a control the
+  // monitoring surface cannot show.
   const manifest = JSON.parse(
-    await Deno.readTextFile(new URL("manifest.json", dash)),
+    await Deno.readTextFile(
+      new URL("../../../../ui/public/compliance-manifest.json", import.meta.url),
+    ),
   );
   const catalogue = JSON.parse(
     await Deno.readTextFile(new URL("../../../../controls.json", import.meta.url)),
@@ -482,14 +476,14 @@ Deno.test("the policy hierarchy covers the whole catalogue — every policy, eve
     manifest.policies.map((p: { slug: string }) => p.slug),
   );
   // manifest = catalogue policies + the declared runtime gate, nothing else
-  for (const p of cataloguePolicies) assert(manifestPolicies.has(p), `missing policy page: ${p}`);
+  for (const p of cataloguePolicies) assert(manifestPolicies.has(p), `missing policy: ${p}`);
   const extras = [...manifestPolicies].filter((p) => !cataloguePolicies.has(p as string));
   assertEquals(extras, ["money-movement-gate"]);
   assertEquals(manifest.control_count, catalogue.controls.length + 6);
 
   // the monitoring tier's contract: every control ships its watch list (the
   // event codes its heartbeat sums), its spec rules, and its test verdicts —
-  // the three things that make a control auditable from the dashboard alone
+  // the three things that make a control auditable from the UI alone
   let withVerdicts = 0;
   for (const p of manifest.policies) {
     for (const c of p.controls) {
@@ -503,23 +497,6 @@ Deno.test("the policy hierarchy covers the whole catalogue — every policy, eve
     }
   }
   assert(withVerdicts >= 300, `only ${withVerdicts} controls carry both tiers' verdicts`);
-
-  // every page loads the shared app under a CONTENT-STAMPED url: without the
-  // stamp a rebuilt app.js stays shadowed by the cached one, and the new
-  // catalogue renders through old code (observed live — 27 cards from a
-  // 28-policy manifest)
-  const stamps = new Set<string>();
-  for (const p of manifest.policies) {
-    const stub = await Deno.readTextFile(new URL(`${p.slug}/index.html`, dash));
-    const m = stub.match(/assets\/app\.js\?v=([0-9a-f]{12})/);
-    assert(m, `${p.slug}: stub must load the shared app under a versioned url`);
-    stamps.add(m[1]);
-  }
-  const indexHtml = await Deno.readTextFile(new URL("index.html", dash));
-  const im = indexHtml.match(/assets\/app\.js\?v=([0-9a-f]{12})/);
-  assert(im, "index must load the shared app under a versioned url");
-  stamps.add(im[1]);
-  assertEquals(stamps.size, 1, "every page must carry the SAME asset stamp");
 });
 
 // ------------------------------------------------------------- flag an event

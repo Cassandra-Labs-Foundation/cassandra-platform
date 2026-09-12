@@ -1090,13 +1090,13 @@ check "no simulated cash can exist in core" \
 
 echo
 echo "-- 38. compliance dashboard: public shell, authenticated data, partner blind --"
-# the dashboard URL redirects to the hosted shell (the Supabase gateway
-# rewrites every renderable content-type to text/plain on shared domains, so
-# the chrome lives on GitHub Pages and this route 302s to it)
+# the dashboard URL redirects to the deployed staff console (the Supabase
+# gateway rewrites every renderable content-type to text/plain on shared
+# domains, so the HTML lives on a real web host and this route 302s to it)
 ST=$(curl -sS -o /dev/null -w '%{http_code}' "$API/compliance/dashboard")
 check "dashboard URL answers without any credential" "$ST" "302"
 LOC=$(curl -sS -o /dev/null -w '%{redirect_url}' "$API/compliance/dashboard")
-check "and redirects to the hosted shell" \
+check "and redirects to the deployed console" \
   "$(case "$LOC" in https://*) echo yes;; *) echo no;; esac)" "yes"
 # the cross-origin shell needs CORS on the data route
 ST=$(curl -sS -o /dev/null -w '%{http_code}' -X OPTIONS "$API/compliance/dashboard/data" \
