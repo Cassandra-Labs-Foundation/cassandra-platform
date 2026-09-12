@@ -1899,6 +1899,12 @@ paths:
     get:
       summary: GET /compliance/dashboard/data
       operationId: get_dashboard_data
+      parameters:
+      - name: provenance
+        in: query
+        description: Evidence origin to filter the live aggregates by (all | sim | core | unknown). Default all.
+        schema:
+          type: string
       responses:
         2XX:
           description: Success. Response contract not yet authored — the handler is the contract; see x-handler.
@@ -1907,10 +1913,33 @@ paths:
       x-audience: public
       x-handler: dashboard.getDashboardData
       x-tier: read
+      x-ui-surface: true
   /compliance/dashboard/events:
     get:
       summary: GET /compliance/dashboard/events
       operationId: get_dashboard_events
+      parameters:
+      - name: codes
+        in: query
+        required: true
+        description: Comma-separated event codes to watch — the control's own trigger + produced codes.
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Page size (default 50).
+        schema:
+          type: integer
+      - name: before
+        in: query
+        description: created_at cursor from a prior page's next_before; returns rows strictly older.
+        schema:
+          type: string
+      - name: src
+        in: query
+        description: Evidence world to read (all | sim | core). Default all.
+        schema:
+          type: string
       responses:
         2XX:
           description: Success. Response contract not yet authored — the handler is the contract; see x-handler.
@@ -1920,10 +1949,27 @@ paths:
       x-audience: public
       x-handler: dashboard.getDashboardEvents
       x-tier: read
+      x-ui-surface: true
   /compliance/dashboard/heartbeat:
     get:
       summary: GET /compliance/dashboard/heartbeat
       operationId: get_dashboard_heartbeat
+      parameters:
+      - name: hours
+        in: query
+        description: Look-back window in hours (default 168).
+        schema:
+          type: integer
+      - name: bucket
+        in: query
+        description: Bucket width in seconds (default 21600 = 6h).
+        schema:
+          type: integer
+      - name: last_seen
+        in: query
+        description: Set to 0 to skip the per-control last-seen roll-up (slim payload) once the client already holds it.
+        schema:
+          type: string
       responses:
         2XX:
           description: Success. Response contract not yet authored — the handler is the contract; see x-handler.
@@ -1933,10 +1979,18 @@ paths:
       x-audience: public
       x-handler: dashboard.getDashboardHeartbeat
       x-tier: read
+      x-ui-surface: true
   /compliance/dashboard/trace/{resourceId}:
     get:
       summary: GET /compliance/dashboard/trace/{resourceId}
       operationId: get_dashboard_trace
+      parameters:
+      - name: resourceId
+        in: path
+        required: true
+        description: The resource_ref whose full event lineage to assemble.
+        schema:
+          type: string
       responses:
         2XX:
           description: Success. Response contract not yet authored — the handler is the contract; see x-handler.
@@ -1946,6 +2000,7 @@ paths:
       x-audience: public
       x-handler: dashboard.getDashboardTrace
       x-tier: read
+      x-ui-surface: true
   /compliance/dashboard/flag:
     post:
       summary: POST /compliance/dashboard/flag

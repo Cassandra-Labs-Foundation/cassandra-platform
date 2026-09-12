@@ -24,3 +24,26 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Rendered policy markdown on the compliance monitoring pages (see
+   lib/miniMarkdown.js + components/compliance/atoms.jsx <Markdown>). Tailwind's
+   preflight strips heading/list styling, so give this narrow document context
+   real typography back — scoped to .dash-md so nothing else is affected. */
+.dash-md p { margin: 0 0 10px; }
+.dash-md p:last-child { margin-bottom: 0; }
+.dash-md h2 { font-size: 15px; font-weight: 600; color: #1e293b; margin: 14px 0 8px; }
+.dash-md h3 { font-size: 13px; font-weight: 600; color: #334155; margin: 12px 0 6px; }
+.dash-md h4 { font-size: 12px; font-weight: 600; color: #64748b; margin: 10px 0 6px; }
+.dash-md a { color: #2563eb; text-decoration: none; }
+.dash-md a:hover { text-decoration: underline; }
+.dash-md code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #eff6ff; color: #1d4ed8; border-radius: 4px; padding: 1px 5px; }
+.dash-md strong { font-weight: 650; color: #0f172a; }
+.dash-md ul, .dash-md ol { margin: 0 0 10px; padding-left: 20px; }
+.dash-md ul { list-style: disc; }
+.dash-md ol { list-style: decimal; }
+.dash-md li { margin: 2px 0; }
+.dash-md blockquote { border-left: 2px solid #e2e8f0; margin: 0 0 10px; padding: 2px 0 2px 12px; color: #64748b; }
+.dash-md .mdtable { overflow-x: auto; margin: 0 0 10px; }
+.dash-md table { min-width: 100%; border-collapse: collapse; font-size: 13px; }
+.dash-md th, .dash-md td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.dash-md th { color: #64748b; font-weight: 500; }

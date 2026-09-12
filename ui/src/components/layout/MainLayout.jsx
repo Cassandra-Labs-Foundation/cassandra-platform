@@ -16,6 +16,7 @@ import {
   CheckSquare,
   CalendarClock,
   BarChart3,
+  Activity,
   Link as LinkIcon
 } from 'lucide-react';
 import { useSession } from '../../lib/context/SessionContext';
@@ -165,6 +166,12 @@ export default function MainLayout({ children, title, subtitle, actions }) {
               icon={<CalendarClock size={20} />}
               label="Compliance"
               active={currentPath === '/compliance'}
+            />
+            <NavItem
+              href="/compliance/dashboard"
+              icon={<Activity size={20} />}
+              label="Monitoring"
+              active={currentPath.startsWith('/compliance/dashboard')}
             />
             <NavItem
               href="/call-report"

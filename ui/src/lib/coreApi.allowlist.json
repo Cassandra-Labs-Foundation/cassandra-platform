@@ -7,15 +7,31 @@
     },
     {
       "path": "/accounts/{id}",
-      "pattern": "^accounts/[A-Za-z0-9_-]+$"
+      "pattern": "^accounts/[A-Za-z0-9_:-]+$"
     },
     {
       "path": "/ach-transfers/{id}",
-      "pattern": "^ach\\-transfers/[A-Za-z0-9_-]+$"
+      "pattern": "^ach\\-transfers/[A-Za-z0-9_:-]+$"
     },
     {
       "path": "/cash/aggregation",
       "pattern": "^cash/aggregation$"
+    },
+    {
+      "path": "/compliance/dashboard/data",
+      "pattern": "^compliance/dashboard/data$"
+    },
+    {
+      "path": "/compliance/dashboard/events",
+      "pattern": "^compliance/dashboard/events$"
+    },
+    {
+      "path": "/compliance/dashboard/heartbeat",
+      "pattern": "^compliance/dashboard/heartbeat$"
+    },
+    {
+      "path": "/compliance/dashboard/trace/{resourceId}",
+      "pattern": "^compliance/dashboard/trace/[A-Za-z0-9_:-]+$"
     },
     {
       "path": "/control-results",
@@ -27,11 +43,11 @@
     },
     {
       "path": "/entities/{id}",
-      "pattern": "^entities/[A-Za-z0-9_-]+$"
+      "pattern": "^entities/[A-Za-z0-9_:-]+$"
     },
     {
       "path": "/entities/{id}/verifications",
-      "pattern": "^entities/[A-Za-z0-9_-]+/verifications$"
+      "pattern": "^entities/[A-Za-z0-9_:-]+/verifications$"
     },
     {
       "path": "/eps/pending-approvals",
@@ -51,22 +67,29 @@
     },
     {
       "path": "/transfers/{id}",
-      "pattern": "^transfers/[A-Za-z0-9_-]+$"
+      "pattern": "^transfers/[A-Za-z0-9_:-]+$"
     },
     {
       "path": "/wire-transfers/{id}",
-      "pattern": "^wire\\-transfers/[A-Za-z0-9_-]+$"
+      "pattern": "^wire\\-transfers/[A-Za-z0-9_:-]+$"
     }
   ],
   "params": [
     "account_id",
     "after",
+    "before",
+    "bucket",
     "business_date",
+    "codes",
     "control_id",
     "decision",
     "entity_id",
     "event",
+    "hours",
+    "last_seen",
     "limit",
+    "provenance",
+    "src",
     "status",
     "subject_ref",
     "type"

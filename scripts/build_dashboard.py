@@ -299,7 +299,14 @@ def build_manifest() -> dict:
 
 def desired_files(manifest: dict) -> dict[pathlib.Path, str]:
     v = asset_version()
-    files = {DASH / "manifest.json": json.dumps(manifest, indent=1) + "\n"}
+    manifest_json = json.dumps(manifest, indent=1) + "\n"
+    files = {DASH / "manifest.json": manifest_json}
+    # The banking UI renders this same catalogue natively (ui/src/pages/
+    # compliance/dashboard/*), reading the manifest as a static asset. Keep a
+    # copy under its public/ dir — generated from the same controls.json, and
+    # gated by --check below so the standalone and in-app dashboards can never
+    # drift to different catalogues.
+    files[ROOT / "ui" / "public" / "compliance-manifest.json"] = manifest_json
     for p in manifest["policies"]:
         files[DASH / p["slug"] / "index.html"] = STUB.format(v=v)
 

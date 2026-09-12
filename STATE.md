@@ -12,7 +12,7 @@
 | routed operations (`routes.gen.ts`) | 334 |
 | registered event codes | 1473 |
 | canonical event types (`x-event-types`) | 118 |
-| UI-surface paths (proxy allowlist) | 14 |
+| UI-surface paths (proxy allowlist) | 18 |
 | operations with stub response contracts | 347 |
 
 ## Core

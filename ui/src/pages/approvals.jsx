@@ -20,7 +20,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import {
-  AlertTriangle, ShieldCheck, ShieldAlert, ExternalLink, ArrowUpRight, Ban, XCircle, PauseCircle,
+  AlertTriangle, ShieldCheck, ShieldAlert, ArrowUpRight, Ban, XCircle, PauseCircle,
 } from 'lucide-react';
 import MainLayout from '../components/layout/MainLayout';
 import {
@@ -38,21 +38,19 @@ const FLAG_CAP = 50; // fetchComplianceFlags default perDecision
 
 // ─────────────────────────────────────────────────────────── small atoms
 
-/** A control, linked to its evidence on the compliance dashboard. */
+/** A control, linked to its evidence in Compliance Monitoring. */
 function ControlChip({ controlId, className = '' }) {
   if (!controlId) return <span className="text-slate-400">—</span>;
   const label = CONTROL_LABEL[controlId];
   return (
-    <a
+    <Link
       href={dashboardControlUrl(controlId)}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`Open ${controlId}${label ? ` — ${label}` : ''} on the compliance dashboard`}
+      title={`Open ${controlId}${label ? ` — ${label}` : ''} in Compliance Monitoring`}
       className={`inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors ${className}`}
     >
       <span className="font-mono">{controlId}</span>
-      <ExternalLink size={11} className="opacity-70" />
-    </a>
+      <ArrowUpRight size={11} className="opacity-70" />
+    </Link>
   );
 }
 
@@ -152,16 +150,14 @@ export default function Approvals() {
       title="Payment Approvals"
       subtitle="The compliance review queue — what the gate held, blocked or rejected, and what nobody assessed"
       actions={
-        <a
+        <Link
           href={dashboardHomeUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
         >
           <ShieldCheck size={15} className="text-indigo-600" />
-          Compliance dashboard
-          <ExternalLink size={13} className="opacity-60" />
-        </a>
+          Compliance Monitoring
+          <ArrowUpRight size={13} className="opacity-60" />
+        </Link>
       }
     >
       {error && (

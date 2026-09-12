@@ -47,7 +47,13 @@ def build_allowlist(doc):
         # escape literal segments — an unescaped '.' or '+' in a future path
         # would silently widen a SECURITY allowlist into a wildcard
         segments = re.split(r"\{[^}]+\}", p.lstrip("/"))
-        pat = "^" + "[A-Za-z0-9_-]+".join(re.escape(s) for s in segments) + "$"
+        # One path param class for every {param}. It allows ':' because a
+        # resource_ref is "type:id" (case:case_…, bsa_alert:alert_…) and the
+        # trace endpoint keys on the whole ref — but never '/' or '.', so a
+        # segment still cannot become a traversal ('..') or span a path
+        # boundary. Ordinary ids (acct_…, ent_…) carry no colon, so this only
+        # widens what the colon-bearing refs need.
+        pat = "^" + "[A-Za-z0-9_:-]+".join(re.escape(s) for s in segments) + "$"
         paths.append({"path": p, "pattern": pat})
         for pr in op.get("parameters") or []:
             if isinstance(pr, dict) and pr.get("in") == "query":
