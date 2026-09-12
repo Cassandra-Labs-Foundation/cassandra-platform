@@ -1,7 +1,7 @@
 {
   "meta": {
     "generator": "scripts/build_control_vocabulary.py",
-    "generated_at": "2026-09-12T18:04:38+00:00",
+    "generated_at": "2026-09-12T18:49:22+00:00",
     "source": "controls.json",
     "api_model": {
       "spec_title": "Cassandra Banking Core API",
@@ -10,7 +10,7 @@
       "fields": 2583,
       "entities": 273
     },
-    "controls_generated_at": "2026-09-12T18:04:34+00:00"
+    "controls_generated_at": "2026-09-12T18:49:18+00:00"
   },
   "stats": {
     "entities": 264,
