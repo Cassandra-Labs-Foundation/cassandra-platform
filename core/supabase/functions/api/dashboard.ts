@@ -1,13 +1,14 @@
 // Compliance dashboard — the surface an examiner or ops officer actually
 // reads. Two routes:
 //
-//   GET /compliance/dashboard        public 302 to the shell (GitHub Pages —
-//                                    see getDashboardShell for why the edge
-//                                    function cannot serve HTML itself). The
-//                                    shell carries ZERO data: it asks for a
-//                                    token once (sessionStorage, never a URL)
-//                                    and fetches the data route with the same
-//                                    X-Api-Key header every client uses.
+//   GET /compliance/dashboard        public 302 to the deployed staff console
+//                                    (ui/, a Next.js app on Vercel — see
+//                                    getDashboardShell for why the edge
+//                                    function cannot serve the HTML itself).
+//                                    The console renders the dashboard at
+//                                    /compliance/dashboard and holds the core
+//                                    API key server-side; this route is just
+//                                    the one stable URL that lands you there.
 //   GET /compliance/dashboard/data   authenticated JSON. Same token pipeline
 //                                    as every route; partner actors get 404
 //                                    (BSA-07: the existence of case management
@@ -645,16 +646,17 @@ export async function postDashboardFlag(
 }
 
 /**
- * One stable URL on the API that takes you to the dashboard. The shell
- * itself CANNOT be served from here: the Supabase gateway rewrites every
- * renderable content-type (text/html, xhtml, even via Storage) to text/plain
- * on its shared domains — an anti-phishing policy; HTML needs a custom
- * domain. So the shell lives on GitHub Pages (compliance/dashboard/index.html —
- * pure chrome, zero data, safe to host publicly) and this route 302s to it.
- * DASHBOARD_SHELL_URL overrides the destination (e.g. a custom domain later).
+ * One stable URL on the API that takes you to the dashboard. The HTML CANNOT
+ * be served from here: the Supabase gateway rewrites every renderable
+ * content-type (text/html, xhtml, even via Storage) to text/plain on its
+ * shared domains — an anti-phishing policy; HTML needs a real web host. So the
+ * dashboard is served by the deployed staff console (ui/, a Next.js app on
+ * Vercel that renders it at /compliance/dashboard and holds the core API key
+ * server-side), and this route 302s to it. DASHBOARD_SHELL_URL overrides the
+ * destination (a custom domain, or a preview deploy).
  */
 export const DEFAULT_SHELL_URL =
-  "https://cassandra-labs-foundation.github.io/cassandra-platform/dashboard/";
+  "https://cassandra-platform.vercel.app/compliance/dashboard";
 
 export function getDashboardShell(requestId: string): Response {
   const dest = Deno.env.get("DASHBOARD_SHELL_URL") ?? DEFAULT_SHELL_URL;
