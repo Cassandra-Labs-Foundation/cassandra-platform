@@ -128,6 +128,31 @@ export async function fetchMembers({ limit = 50, type } = {}) {
   return body.data.map(toMember);
 }
 
+/**
+ * Membership: the headcount AND the growth curve, from every entity's
+ * created_at. `count` is a lower bound when `truncated` (the walk hit getAll's
+ * cap). `growth` is the cumulative member count by month — a real trend, since
+ * created_at is fixed history (unlike balances, which the core keeps no history
+ * of). The core has no count endpoint, so this reads every entity, not a page.
+ */
+export async function fetchMembershipSummary() {
+  const entities = await getAll("entities");
+  const byMonth = new Map();
+  for (const e of entities) {
+    const at = e.created_at;
+    if (!at) continue;
+    const k = String(at).slice(0, 7); // YYYY-MM
+    byMonth.set(k, (byMonth.get(k) ?? 0) + 1);
+  }
+  let cum = 0;
+  const growth = [...byMonth.keys()].sort().map((month) => {
+    const added = byMonth.get(month);
+    cum += added;
+    return { month, added, cumulative: cum };
+  });
+  return { count: entities.length, truncated: Boolean(entities.hitCap), growth };
+}
+
 export async function fetchMember(memberId) {
   return toMember(await get(`entities/${memberId}`));
 }
@@ -467,6 +492,26 @@ export async function fetchTransactions({ limit = 50, accountId, status, all = f
 
 export function fetchAccountTransactions(accountId, opts = {}) {
   return fetchTransactions({ ...opts, accountId });
+}
+
+/**
+ * Every transfer's timestamp, amount and status — for the accounting activity
+ * chart and the live tape. Deliberately leaner than fetchTransactions: it skips
+ * the counterparty-name resolution (the two-hop account→entity walk), because
+ * the activity view needs only WHEN money moved and HOW MUCH, not whose. Every
+ * page, capped by getAll; `truncated` says whether the flow is a lower bound.
+ */
+export async function fetchTransferFlow() {
+  const rows = await getAll("transfers");
+  const transfers = rows
+    .map((t) => ({
+      id: t.id,
+      createdAt: t.created_at ?? null,
+      amountCents: typeof t.amount_cents === "number" ? t.amount_cents : 0,
+      status: TRANSFER_STATUS_LABEL[t.status] ?? t.status ?? "unknown",
+    }))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return { transfers, truncated: Boolean(rows.hitCap) };
 }
 
 // ---------------------------------------------------------------- accounting
