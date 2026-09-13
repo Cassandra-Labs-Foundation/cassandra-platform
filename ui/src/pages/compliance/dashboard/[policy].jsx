@@ -10,15 +10,16 @@
 // Ported from the standalone dashboard's policy + control views. `?c=` matches
 // a control by its short id OR its full uid, so a deep link from the Approvals
 // queue (which links by short id) lands on the control, not the policy list.
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import MainLayout from "../../../components/layout/MainLayout";
 import { useDashboard } from "../../../lib/useDashboard";
+import { fetchObligations } from "../../../lib/api";
 import { pulseOf, ago, fmtT } from "../../../lib/dashboardModel";
 import { md } from "../../../lib/miniMarkdown";
-import { approvalsQueueUrl } from "../../../lib/complianceLinks";
+import { approvalsQueueUrl, reportsUrlForControl, calendarUrlForControl } from "../../../lib/complianceLinks";
 import {
   Sparkline, StatusDot, TestBadges, EventCode, Panel, BigStat, KvTable, Markdown, Swatch, n, CORE_FILL, SIM_FILL,
 } from "../../../components/compliance/atoms";
@@ -266,6 +267,20 @@ function ControlView({ policy, control, model }) {
   const queueUrl = approvalsQueueUrl(control);
   const slug = policy.slug;
 
+  // Does this control own any governance obligations? Only then does the
+  // "calendar" link go somewhere — a link to an empty calendar filter is the
+  // dead-button problem, so it is gated on a real match, not shown by default.
+  const [hasObligations, setHasObligations] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchObligations()
+      .then((d) => {
+        if (!cancelled) setHasObligations((d.obligations ?? []).some((o) => o.control_uid === control.uid));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [control.uid]);
+
   const cits = (control.citations || []).map((r, i) =>
     r.url ? (
       <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.text}</a>
@@ -293,13 +308,24 @@ function ControlView({ policy, control, model }) {
         {cits.length > 0 && <span className="text-slate-500">{cits.reduce((acc, c, i) => (i ? [...acc, ", ", c] : [c]), [])}</span>}
       </div>
 
-      {queueUrl && (
-        <div className="mb-4">
-          <a href={queueUrl} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">
+      {/* This control across the other surfaces — its recorded decisions in
+          Reports, its obligations on the calendar (when it has any), and its
+          actionable queue in Approvals (gate/EPS controls only). */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Link href={reportsUrlForControl(control.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          Recorded decisions in Reports <ArrowUpRight size={14} className="opacity-60" />
+        </Link>
+        {hasObligations && (
+          <Link href={calendarUrlForControl(control.uid)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            On the compliance calendar <ArrowUpRight size={14} className="opacity-60" />
+          </Link>
+        )}
+        {queueUrl && (
+          <Link href={queueUrl} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">
             Review queue in Approvals <ArrowUpRight size={14} />
-          </a>
-        </div>
-      )}
+          </Link>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Panel title={`Heartbeat — ${model.hb.window_hours / 24}d`}>

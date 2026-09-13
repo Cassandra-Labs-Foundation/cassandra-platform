@@ -7,7 +7,7 @@
 // proxy + the static manifest (see lib/useDashboard).
 import React from "react";
 import Link from "next/link";
-import { CalendarClock, CheckSquare } from "lucide-react";
+import { CalendarClock, CheckSquare, Book } from "lucide-react";
 import MainLayout from "../../../components/layout/MainLayout";
 import { useDashboard } from "../../../lib/useDashboard";
 import { pulseOf, sumPulses, fmtT } from "../../../lib/dashboardModel";
@@ -24,6 +24,9 @@ export default function ComplianceMonitoring() {
         <div className="flex items-center gap-2">
           <Link href="/compliance" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
             <CalendarClock size={15} className="text-blue-600" /> Governance calendar
+          </Link>
+          <Link href="/reports" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            <Book size={15} className="text-slate-600" /> Control results
           </Link>
           <Link href="/approvals" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
             <CheckSquare size={15} className="text-indigo-600" /> Approvals

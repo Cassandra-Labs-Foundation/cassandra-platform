@@ -29,6 +29,7 @@ import {
 } from '../lib/api';
 import {
   CONTROL_LABEL, controlCodeFromBasis, dashboardControlUrl, dashboardHomeUrl, subjectHref,
+  reportsUrlForControl,
 } from '../lib/complianceLinks';
 
 const RAIL_LABEL = { ach_transfer: 'ACH', wire_transfer: 'Wire' };
@@ -255,7 +256,17 @@ export default function Approvals() {
                           {CONTROL_LABEL[controlId] ?? 'Control'}
                         </span>
                       </div>
-                      <span className="text-xs text-slate-500 whitespace-nowrap">{rows.length} flagged</span>
+                      <div className="flex items-center gap-3 whitespace-nowrap">
+                        {/* Every decision this control recorded, not just the flagged ones. */}
+                        <Link
+                          href={reportsUrlForControl(controlId)}
+                          title={`See all of ${controlId}'s recorded decisions in Reports`}
+                          className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:underline"
+                        >
+                          Reports <ArrowUpRight size={11} className="opacity-70" />
+                        </Link>
+                        <span className="text-xs text-slate-500">{rows.length} flagged</span>
+                      </div>
                     </div>
                     <table className="w-full">
                       <thead>

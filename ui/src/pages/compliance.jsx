@@ -7,9 +7,12 @@
 // Sorting those to the bottom of the schedule would make them look like the
 // most distant deadlines instead of the undated work they are.
 import React, { useEffect, useState } from 'react';
-import { CalendarClock, CalendarOff } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { CalendarClock, CalendarOff, ArrowUpRight } from 'lucide-react';
 import MainLayout from '../components/layout/MainLayout';
 import { fetchObligations, formatWhen, OBLIGATIONS_CAP } from '../lib/api';
+import { useControlIndex, monitoringUrlForControl, reportsUrlForControl } from '../lib/complianceLinks';
 
 /**
  * ISO timestamp -> "Jul 19, 2026". Due dates are dates, not moments.
@@ -42,9 +45,17 @@ function monthOf(iso) {
 }
 
 export default function Compliance() {
+  const router = useRouter();
+  // The control catalogue, for linking an obligation's control_uid to the
+  // control's monitoring surface and its recorded decisions in Reports.
+  const { index } = useControlIndex();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Arrived from a control in Monitoring (?control_uid=bsa:BSA-01): that
+  // control's obligation rows get ringed and the first is scrolled into view.
+  const focusUid = typeof router.query.control_uid === 'string' ? router.query.control_uid : null;
 
   useEffect(() => {
     async function loadData() {
@@ -60,6 +71,17 @@ export default function Compliance() {
 
     loadData();
   }, []);
+
+  // Once the focused control's rows are on the page, bring the first into view.
+  // A control can own several obligations (different triggers), so match on the
+  // data attribute in JS rather than a selector — first in DOM order wins, and
+  // a control_uid from the URL never reaches a CSS query.
+  useEffect(() => {
+    if (!focusUid) return;
+    const rows = document.querySelectorAll('[data-oblig-control]');
+    const el = Array.from(rows).find((r) => r.getAttribute('data-oblig-control') === focusUid);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusUid, data]);
 
   const rows = data?.obligations ?? [];
   // Split on anchor_date, the same field the core counts on.
@@ -93,6 +115,16 @@ export default function Compliance() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
           <h3 className="font-medium text-red-800">Could not load the obligation register</h3>
           <p className="text-sm text-red-600 mt-0.5">{error}</p>
+        </div>
+      )}
+
+      {focusUid && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">
+          <span className="text-blue-800">
+            Opened from Monitoring — focused on obligations for{' '}
+            <span className="font-mono font-medium">{focusUid}</span>
+          </span>
+          <Link href="/compliance" className="text-blue-600 hover:underline shrink-0">Clear</Link>
         </div>
       )}
 
@@ -155,7 +187,8 @@ export default function Compliance() {
                         return (
                           <tr
                             key={o.id}
-                            className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50"
+                            data-oblig-control={o.control_uid ?? undefined}
+                            className={`border-b border-slate-200 last:border-b-0 hover:bg-slate-50 ${focusUid && o.control_uid === focusUid ? 'bg-blue-50 ring-2 ring-inset ring-blue-300' : ''}`}
                           >
                             <td className="py-3 px-4 text-sm whitespace-nowrap">
                               <span className={overdue ? 'text-red-700 font-medium' : ''}>
@@ -169,10 +202,7 @@ export default function Compliance() {
                             </td>
                             <td className="py-3 px-4">
                               <div className="font-medium text-sm">{o.title ?? o.trigger_code}</div>
-                              <div className="text-xs text-slate-500 mt-0.5">
-                                {o.control_uid ?? '—'}
-                                {o.trigger_code ? ` · ${o.trigger_code}` : ''}
-                              </div>
+                              <ObligationControl o={o} index={index} />
                             </td>
                             <td className="py-3 px-4 text-sm text-slate-600">
                               {o.owner_role ?? '—'}
@@ -221,14 +251,12 @@ export default function Compliance() {
                     {unscheduled.map((o) => (
                       <tr
                         key={o.id}
-                        className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50"
+                        data-oblig-control={o.control_uid ?? undefined}
+                        className={`border-b border-slate-200 last:border-b-0 hover:bg-slate-50 ${focusUid && o.control_uid === focusUid ? 'bg-blue-50 ring-2 ring-inset ring-blue-300' : ''}`}
                       >
                         <td className="py-3 px-4">
                           <div className="font-medium text-sm">{o.title ?? o.trigger_code}</div>
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            {o.control_uid ?? '—'}
-                            {o.trigger_code ? ` · ${o.trigger_code}` : ''}
-                          </div>
+                          <ObligationControl o={o} index={index} />
                         </td>
                         <td className="py-3 px-4 text-sm text-slate-600">{o.owner_role ?? '—'}</td>
                         <td className="py-3 px-4 text-sm text-slate-600">{o.cadence ?? '—'}</td>
@@ -245,6 +273,45 @@ export default function Compliance() {
         </>
       )}
     </MainLayout>
+  );
+}
+
+/**
+ * An obligation's control line: the policy-qualified control_uid, its trigger,
+ * and a jump to its recorded decisions in Reports.
+ *
+ * The uid is policy-qualified, so it is unambiguous — but it is only a link when
+ * the control is actually in the catalogue. An obligation whose control the
+ * manifest has never heard of keeps the id as plain text rather than linking to
+ * a monitoring page that would just say "not in the catalogue".
+ */
+function ObligationControl({ o, index }) {
+  const entry = o.control_uid ? index?.resolve(o.control_uid) : null;
+  return (
+    <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+      {entry ? (
+        <Link
+          href={monitoringUrlForControl(entry)}
+          title={`Open ${entry.id}${entry.title ? ` — ${entry.title}` : ''} in Monitoring`}
+          className="inline-flex items-center gap-0.5 font-mono text-blue-600 hover:underline"
+        >
+          {o.control_uid}
+          <ArrowUpRight size={10} className="opacity-70" />
+        </Link>
+      ) : (
+        <span className="font-mono">{o.control_uid ?? '—'}</span>
+      )}
+      {o.trigger_code ? <span>· {o.trigger_code}</span> : null}
+      {entry && (
+        <Link
+          href={reportsUrlForControl(entry.id)}
+          title={`See ${entry.id}'s recorded decisions in Reports`}
+          className="text-blue-600 hover:underline"
+        >
+          results →
+        </Link>
+      )}
+    </div>
   );
 }
 

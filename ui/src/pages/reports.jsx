@@ -8,9 +8,12 @@
 // scheduled exports) have no endpoint behind them, so they are not listed here
 // as if they were a click away.
 import React, { useCallback, useEffect, useState } from 'react';
-import { Filter } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { Filter, ArrowUpRight } from 'lucide-react';
 import MainLayout from '../components/layout/MainLayout';
 import { fetchControlResults, formatWhen } from '../lib/api';
+import { useControlIndex, monitoringUrlForControl, subjectHref } from '../lib/complianceLinks';
 
 const PAGE_SIZE = 50;
 
@@ -27,6 +30,10 @@ const DECISION_STYLE = {
 const EMPTY_FILTERS = { control_id: '', decision: '', event: '', subject_ref: '' };
 
 export default function Reports() {
+  const router = useRouter();
+  // The control catalogue, for turning a control_id into a link to its
+  // monitoring surface. Null while it loads; links upgrade in when it lands.
+  const { index } = useControlIndex();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   // `applied` is what the last request actually used. Kept separate from
   // `filters` so edits in the form don't silently relabel rows already loaded.
@@ -64,9 +71,22 @@ export default function Reports() {
     }
   }, []);
 
+  // Arrive pre-filtered from another surface: /reports?control_id=…&subject_ref=…
+  // (a control on the calendar, a control page in Monitoring, or a flag in
+  // Approvals links here). Waits for the router to hydrate the query, then loads
+  // that slice; with no query it loads everything, exactly as a cold open did.
   useEffect(() => {
-    load(EMPTY_FILTERS, null);
-  }, [load]);
+    if (!router.isReady) return;
+    const q = router.query;
+    const initial = {
+      ...EMPTY_FILTERS,
+      control_id: typeof q.control_id === 'string' ? q.control_id : '',
+      subject_ref: typeof q.subject_ref === 'string' ? q.subject_ref : '',
+    };
+    setFilters(initial);
+    load(initial, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady, router.query.control_id, router.query.subject_ref, load]);
 
   const activeFilters = Object.entries(applied).filter(([, v]) => v !== '');
 
@@ -191,7 +211,9 @@ export default function Reports() {
             <tbody>
               {results.map((row) => (
                 <tr key={row.id} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50">
-                  <td className="py-3 px-4 font-medium text-sm">{row.control_id}</td>
+                  <td className="py-3 px-4 font-medium text-sm">
+                    <ControlCell controlId={row.control_id} index={index} />
+                  </td>
                   <td className="py-3 px-4 text-sm">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -203,7 +225,7 @@ export default function Reports() {
                   </td>
                   <td className="py-3 px-4 text-sm text-slate-600">{row.event ?? '—'}</td>
                   <td className="py-3 px-4 text-sm font-mono text-xs text-slate-600 break-all">
-                    {row.subject_ref ?? '—'}
+                    <SubjectCell subjectRef={row.subject_ref} />
                   </td>
                   {/* A null score means the control does not score, which is
                       not the same as scoring zero. */}
@@ -243,5 +265,39 @@ export default function Reports() {
         )}
       </div>
     </MainLayout>
+  );
+}
+
+/**
+ * The control id, linked to its monitoring surface WHEN it resolves to exactly
+ * one catalogued control. A bare control_id off core.control_result is a short
+ * id, and a few of those (SC-01/02/03) belong to eight or nine policies at once
+ * — so an unresolved or ambiguous id stays plain text rather than linking to a
+ * guessed policy. `index` is null until the catalogue loads; text until then.
+ */
+function ControlCell({ controlId, index }) {
+  const entry = index?.resolve(controlId);
+  if (!entry) return <span>{controlId ?? '—'}</span>;
+  return (
+    <Link
+      href={monitoringUrlForControl(entry)}
+      title={`Open ${entry.id}${entry.title ? ` — ${entry.title}` : ''} in Monitoring`}
+      className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+    >
+      {controlId}
+      <ArrowUpRight size={12} className="opacity-70" />
+    </Link>
+  );
+}
+
+/** The flagged subject, linked to its member/account page when the ref resolves here. */
+function SubjectCell({ subjectRef }) {
+  const href = subjectHref(subjectRef);
+  if (!href) return <span>{subjectRef ?? '—'}</span>;
+  return (
+    <Link href={href} className="inline-flex items-center gap-1 text-blue-600 hover:underline break-all" title="Open this member/account">
+      {subjectRef}
+      <ArrowUpRight size={12} className="shrink-0 opacity-70" />
+    </Link>
   );
 }
