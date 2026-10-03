@@ -22,7 +22,7 @@ import {
   type ValidationErrorItem,
 } from "./lib.ts";
 import { scopeToPartner } from "./ownership.ts";
-import { raiseAlert } from "./bsa.ts";
+import { provenanceFor, raiseAlert } from "./bsa.ts";
 import { startRetentionFor } from "./retention.ts";
 import { type PartnerContext } from "./auth.ts";
 
@@ -119,6 +119,9 @@ export async function postVerification(
 
   const { error: crErr } = await db.schema("core").from("control_result").insert({
     id: `cr_${crypto.randomUUID()}`,
+    // the only control_result writer that omitted this: OFAC evidence landed
+    // as `unknown` for every caller, so it could never support a coverage claim
+    provenance: provenanceFor("core", ctx),
     control_id: "CG-OFAC-01",
     decision: ofac === "hit" ? "reject" : "pass",
     event: verificationId,

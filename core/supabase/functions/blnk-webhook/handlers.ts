@@ -139,20 +139,33 @@ async function applyTransaction(db: SupabaseClient, d: BlnkTransactionData): Pro
     throw new Error(`no core row for transaction ${d.transaction_id ?? d.reference ?? "?"}`);
   }
 
+  const isCard = table === "card_authorization";
   const patch: Record<string, unknown> = {
     synced_at: new Date().toISOString(),
-    [ID_COLUMN[table]]: d.transaction_id,
+    // A card authorization is ONE hold with many child moves: each capture and
+    // the final void is its own Blnk transaction carrying the same
+    // core_resource. Writing the event's transaction_id here replaced the hold
+    // id with a capture's id, and every later capture/reverse/expire then sent
+    // PUT /transactions/inflight/<capture id> and got a 502. cards.ts owns the
+    // hold id; the webhook only back-fills it below when the writer never did.
+    ...(isCard ? {} : { [ID_COLUMN[table]]: d.transaction_id }),
     // Stamp the CANONICAL reference, never the `_q` child spelling: writers
     // generate the un-suffixed form and the reconciler's by-reference lookups
     // expect it, so persisting `_q` here would corrupt both.
     ...(ourRef ? { blnk_reference: ourRef } : {}),
   };
-  // card capture: track cumulative committed amount on APPLIED
-  if (table === "card_authorization" && d.status === "APPLIED" && typeof d.precise_amount === "number") {
-    patch.blnk_committed_amount = d.precise_amount;
-  }
+  // blnk_committed_amount is deliberately NOT written here. It is a running
+  // total; this event carries one capture's amount, so copying it made a
+  // partly captured card read as under-captured and waved over-captures past
+  // the 422 guard. cards.ts maintains the total on every capture and the
+  // reconciler (blnk-reconcile/sweeps.ts) re-sums the applied children.
   const { error } = await db.schema("core").from(table).update(patch).match(match);
   if (error) throw new Error(`update ${table}: ${error.message}`);
+  if (isCard && d.status === "INFLIGHT" && d.transaction_id) {
+    const { error: idErr } = await db.schema("core").from(table)
+      .update({ blnk_inflight_id: d.transaction_id }).match(match).is("blnk_inflight_id", null);
+    if (idErr) throw new Error(`backfill ${table}.blnk_inflight_id: ${idErr.message}`);
+  }
 
   // TODO(phase-5): on APPLIED, refresh account.balance mirror for d.source/d.destination
   //   via Blnk GET /balances/{id}; raise control_result/bsa_alert on flagged moves.

@@ -10,7 +10,7 @@ Imported from `Cassandra-Labs-Foundation/cassandra-core` @ `af1c062` on 2026-07-
 
 ## architecture-decisions.md is the reason this directory exists
 
-The tree cites these decisions **549 times across 56 files** (`python3
+The tree cites these decisions **567 times across 59 files** (`python3
 scripts/check_decision_refs.py` is the count of record) — `-- per D4`, `(D23)`, `D25` —
 and until this import none of those citations resolved, because the log lived in
 another repo. Code compensated by re-narrating decisions inline, which is how a decision

@@ -55,7 +55,10 @@ export async function actor(actorType: ActorType, roles: BsaRole[] = []): Promis
   if (inst.error) throw new Error(`actor: instance lookup: ${inst.error.message}`);
   let partnerId: string | null = null;
   if (actorType === "partner") {
-    const p = await core().from("partner").select("id").eq("status", "active").limit(1).single();
+    // THIS instance's partner: the core also hosts ptnr_drill on inst_drill,
+    // and a token bound to another instance's partner authenticates as 401.
+    const p = await core().from("partner").select("id")
+      .eq("status", "active").eq("instance_id", inst.data.id).order("id").limit(1).single();
     if (p.error) throw new Error(`actor: partner lookup: ${p.error.message}`);
     partnerId = p.data.id;
   }

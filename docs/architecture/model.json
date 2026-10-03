@@ -11,8 +11,8 @@
       "boundary": "This ordering means a velocity-blocked movement does not reach this detector. The book-transfer handler also has a safe-mode gate before runGate. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
       "file": "core/supabase/functions/api/transfers.ts",
       "line": 113,
-      "test": "transfers.test.ts",
-      "testline": 155,
+      "test": "core/verifier/flows/transfers.test.ts",
+      "testline": 219,
       "contract": "Reads transfer, wire_transfer, ach_transfer and card_authorization. Uses UTC day boundaries and selected statuses; it is not a rolling 24-hour window."
     },
     "threshold": {
@@ -26,8 +26,8 @@
       "boundary": "The alert is named ctr_threshold in code. That name alone does not demonstrate that cash reporting obligations are satisfied.",
       "file": "core/supabase/functions/api/transfers.ts",
       "line": 176,
-      "test": "transfers.test.ts",
-      "testline": 135,
+      "test": "core/verifier/flows/onboard_transfer_large_txn.test.ts",
+      "testline": 60,
       "contract": "Writes control_result with decision=pass. subject_ref is the source account; entity_hash is SHA-256 of the source account ID."
     },
     "blocked": {
@@ -41,8 +41,8 @@
       "boundary": "This is a neighboring payment gate, included here because it changes this control’s reach.",
       "file": "core/supabase/functions/api/transfers.ts",
       "line": 147,
-      "test": "transfers.test.ts",
-      "testline": 155,
+      "test": "core/verifier/flows/transfers.test.ts",
+      "testline": 219,
       "contract": "Returns blocked=true and velocity_limit_exceeded. Writes are awaited and errors throw."
     },
     "alert": {
@@ -71,8 +71,8 @@
       "boundary": "“No alert from this rule” does not mean the movement is safe, compliant, or guaranteed to settle.",
       "file": "core/supabase/functions/api/transfers.ts",
       "line": 205,
-      "test": "transfers.test.ts",
-      "testline": 145,
+      "test": "core/verifier/flows/transfers.test.ts",
+      "testline": 188,
       "contract": "Control returns to the remainder of runGate. This branch is not the end of payment processing."
     },
     "access": {
@@ -424,16 +424,17 @@
     "reviewedAt": "2026-10-03",
     "method": "Manual source trace",
     "sources": {
-      "core/supabase/functions/api/transfers.ts": "5c6ea984478a6fed6d6885d61638128cc5790bb352cb2d9fe0e13e3b8027d029",
-      "core/supabase/functions/api/transfers.test.ts": "036baca453c36213cb37e10e65e5df0a98707cc7d39fb89272dc5bdb9c9d109a",
+      "core/supabase/functions/api/transfers.ts": "99cb9aabf88b2af97f94bbdafd26e494856331b9a486160efc7d3521660c23ce",
+      "core/verifier/flows/transfers.test.ts": "bcb54b0985c73e8156cda76a10cf632d6461d8d594f29fb5f733188088648f8b",
+      "core/verifier/flows/onboard_transfer_large_txn.test.ts": "d082613a09fa522aaba59758280a735b2adccceb18f73576914ca3a12a59b8d1",
       "core/supabase/functions/api/bsa.ts": "7bc2ff6efd4e92dc01d62789f0df11fa950c473f01690769b6e9fefab7fab4e8",
       "core/supabase/functions/api/bsa.test.ts": "9fd5fff0cea6f44c5222b02eb35d8529568092f83f00bc6d1a767874f8727d61",
       "compliance/policies/bsa/bsa.md": "86c729ae3ed00a0132d8d2044c1cdd15d1e36ebebf71840fa8239795291a1bd9",
       "core/supabase/functions/api/index.ts": "8f3a0358ad43f2c06d2b5691ad0af37f0a8174449c61ec8e22197fd8b1f8907e",
       "core/supabase/functions/api/auth.ts": "16592020060175d0c0e696201743ead99875834c222a8ef6a8b42a709e3b928f",
-      "core/supabase/functions/api/ach.ts": "8e7ee5f589ce9c66ffdee301f1869140fc57cd25deaeb3579f36a3f873c4ba8d",
-      "core/supabase/functions/api/wires.ts": "8c6dbd15f4907cb39dc66eccc2d6d9bfebd7d71f9966a5be4bf342e299cca971",
-      "core/supabase/functions/api/cards.ts": "4cf0f2fb9c325baaeb984c37e05c354ba48c9428ce7ec3748f05d9f967b38e29",
+      "core/supabase/functions/api/ach.ts": "a835b3fdf6099b982c69b457201400d101bdd165a62a1ccc35aad4f5b83a39af",
+      "core/supabase/functions/api/wires.ts": "d69f149a6e09e4357da9bca6129c7b624c85c406feffd697805b31216fb290e3",
+      "core/supabase/functions/api/cards.ts": "a95bec8877929ba6195a49f12b5613b5a9449d65af8577b2c01e5cb96e0030bf",
       "core/supabase/functions/api/cda.ts": "5dccb8f7660e9cfa2c81bf206f27f72a4675dd98e97336a9eeded50a6a0c04f3",
       "scripts/rebuild_artifacts.sh": "35f73afe052fef60086e626038e9a2616a11022c164277799da19adcea304d32"
     }

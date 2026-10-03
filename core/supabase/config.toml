@@ -20,3 +20,10 @@ verify_jwt = false
 [functions.api]
 # Demo BaaS API slice; authenticated with X-Api-Key (DEMO_API_KEY secret).
 verify_jwt = false
+
+[functions.aggregator]
+# Verifies its own instance JWT (D19, HS256 with AGGREGATOR_JWT_SECRET), which
+# is not a Supabase JWT — gateway verification must stay off or every outbox
+# delivery is 401'd before the handler runs. It was only ever deployed with
+# --no-verify-jwt by hand; a plain CLI deploy re-enabled the gateway check.
+verify_jwt = false

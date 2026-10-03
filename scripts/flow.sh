@@ -58,13 +58,15 @@ args=(--allow-net --allow-env core/verifier/flows/)
 pass=0
 for i in $(seq 1 "$RUNS"); do
   out=$(NO_COLOR=1 deno test "${args[@]}" 2>&1) && ok=1 || ok=0
-  summary=$(grep -E '^(ok|FAILED) \|' <<<"$out" | tail -1)
+  # `|| true`: no summary line (a type error, a crash) must reach the
+  # fallback below, not kill the script silently under pipefail
+  summary=$(grep -E '^(ok|FAILED) \|' <<<"$out" | tail -1 || true)
   if [ "$ok" = 1 ]; then
     pass=$((pass + 1)); echo "run $i: $summary"
   else
     echo "run $i: ${summary:-crashed}"
     # the failing step and its assertion message, nothing else
-    grep -E '^\S.* \.\.\. .* => |^error: ' <<<"$out" | grep -B1 '^error: Error' | grep -v '^--$' | sed 's/^/  /'
+    { grep -E '^\S.* \.\.\. .* => |^error: ' <<<"$out" | grep -B1 '^error: Error' | grep -v '^--$' | sed 's/^/  /'; } || true
     [ -z "$summary" ] && tail -15 <<<"$out"
   fi
 done

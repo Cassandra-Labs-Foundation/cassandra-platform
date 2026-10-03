@@ -1430,11 +1430,13 @@ echo "-- 43. chaos, shifted left: pause, block, recover exactly once (63) --"
 # The paused-consumer half of card 63, live: hold the payment_hub cursor's
 # row lock in a background transaction — every consumer run (cron included)
 # BLOCKS on the for-update rather than skipping past it. When the lock drops,
-# the blocked run proceeds and applies exactly once. The severed-link half is
-# proven at the unit tier (events.test.ts: 503 and thrown-fetch reschedule
-# the whole batch with per-event backoff, nothing lost or duplicated) — the
-# platform offers no switch to cut a deployed function's egress on demand,
-# and that limit is stated here rather than papered over.
+# the blocked run proceeds and applies exactly once. The severed-link half
+# (503 / thrown fetch reschedule the batch with per-event backoff, nothing lost
+# or duplicated) is NOT proven anywhere now: it lived in the stubbed
+# events.test.ts, retired 2026-10-03 for live flows (core/verifier/flows/
+# ledger/events.md), and the platform offers no switch to cut a deployed
+# function's egress on demand. That limit is stated here rather than papered
+# over.
 # The pause/recovery chaos test went with the consumer it paused: there is no
 # cursor to hold a lock on, and a roll-up cannot "sit unapplied" — it reads
 # through to whatever the balances say. What replaces it is the property that

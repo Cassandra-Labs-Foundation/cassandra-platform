@@ -1,6 +1,6 @@
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type AccountRow } from "./accounts.ts";
-import { type GateResource, recordMovementArtifacts, runGate } from "./transfers.ts";
+import { attachControlResults, type GateResource, recordMovementArtifacts, runGate } from "./transfers.ts";
 import {
   type BlnkConfig,
   BlnkError,
@@ -778,7 +778,7 @@ export async function getAchTransfers(
     limit,
   );
   return jsonResponse(
-    pageEnvelope((page as unknown as AchReadRow[]).map(achReadResponse), {
+    pageEnvelope((await attachControlResults(db, page as unknown as AchReadRow[])).map(achReadResponse), {
       limit,
       has_more,
       next_after,
@@ -806,5 +806,6 @@ export async function getAchTransfer(
   ).maybeSingle();
   if (error) return internalErrorResponse(requestId, error);
   if (!data) return notFoundResponse(requestId, "ach_transfer", achId);
-  return jsonResponse(achReadResponse(data as unknown as AchReadRow), 200, requestId);
+  const [row] = await attachControlResults(db, [data as unknown as AchReadRow]);
+  return jsonResponse(achReadResponse(row), 200, requestId);
 }

@@ -10,6 +10,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+def test_path(test):
+    # Bare names are the old stubbed handler tests beside the handlers; a path
+    # is repo-relative (the live E2E flows under core/verifier/flows/).
+    return test if '/' in test else 'core/supabase/functions/api/' + test
+
 def validate(root=ROOT):
     model = json.loads((root / 'docs/architecture/model.json').read_text())
     errors = []
@@ -26,7 +31,7 @@ def validate(root=ROOT):
         if not model['internals'].get(key):
             errors.append(f'{key}: missing implementation decomposition')
         for name, line in [(node['file'], node['line']),
-                           ('core/supabase/functions/api/' + node['test'], node['testline'])]:
+                           (test_path(node['test']), node['testline'])]:
             if name not in sources:
                 errors.append(f'{key}: source not fingerprinted: {name}')
             path = root / name

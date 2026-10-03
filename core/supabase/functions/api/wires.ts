@@ -1,6 +1,6 @@
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type AccountRow } from "./accounts.ts";
-import { type GateResource, recordMovementArtifacts, runGate } from "./transfers.ts";
+import { attachControlResults, type GateResource, recordMovementArtifacts, runGate } from "./transfers.ts";
 import {
   type BlnkConfig,
   BlnkError,
@@ -906,7 +906,7 @@ export async function getWireTransfers(
     limit,
   );
   return jsonResponse(
-    pageEnvelope((page as unknown as WireReadRow[]).map(wireReadResponse), {
+    pageEnvelope((await attachControlResults(db, page as unknown as WireReadRow[])).map(wireReadResponse), {
       limit,
       has_more,
       next_after,
@@ -941,5 +941,6 @@ export async function getWireTransfer(
   ).maybeSingle();
   if (error) return internalErrorResponse(requestId, error);
   if (!data) return notFoundResponse(requestId, "wire_transfer", wireId);
-  return jsonResponse(wireReadResponse(data as unknown as WireReadRow), 200, requestId);
+  const [row] = await attachControlResults(db, [data as unknown as WireReadRow]);
+  return jsonResponse(wireReadResponse(row), 200, requestId);
 }

@@ -302,7 +302,14 @@ export async function runGate(
   }
 
   const blnkBal = await getBalance(cfg, sourceAccount.blnk_balance_id!);
-  const available = typeof blnkBal.balance === "number" ? blnkBal.balance : 0;
+  // Funds already held by a pending wire/ACH/card hold are spoken for. Using
+  // the settled balance alone let a second hold pass this check; Blnk then
+  // refused to place it and the member got a bare 502 instead of a typed
+  // insufficient_funds with CG-NSF-01 evidence (caught by the partner-flow
+  // suite: two $900 wires against $1,000).
+  const available = typeof blnkBal.balance === "number"
+    ? blnkBal.balance - (blnkBal.inflight_debit_balance ?? 0)
+    : 0;
 
   if (available < amountCents) {
     const crId = `cr_${crypto.randomUUID()}`;
@@ -450,6 +457,32 @@ async function loadControlResults(
     .order("created_at", { ascending: true });
   if (error) throw new Error(`control_result fetch: ${error.message}`);
   return (data ?? []) as ControlResultRef[];
+}
+
+/**
+ * Fill `control_results` on wire/ACH/card read rows from core.control_result —
+ * the table the gate actually writes. Those tables carry a `control_results`
+ * jsonb column that no writer has ever populated, so reads built on it told the
+ * partner no control fired on an entry that raised CG-LGTXN-01 (caught by the
+ * partner-flow suite). One query per page, keyed on event = resource id.
+ */
+export async function attachControlResults<
+  T extends { id: string; control_results?: ControlResultRef[] | null },
+>(db: SupabaseClient, rows: T[]): Promise<T[]> {
+  if (!rows.length) return rows;
+  const { data, error } = await db.schema("core").from("control_result")
+    .select("event, control_id, decision")
+    .in("event", rows.map((r) => r.id))
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`control_result fetch: ${error.message}`);
+  const byEvent = new Map<string, ControlResultRef[]>();
+  for (const c of (data ?? []) as (ControlResultRef & { event: string })[]) {
+    const list = byEvent.get(c.event) ?? [];
+    list.push({ control_id: c.control_id, decision: c.decision });
+    byEvent.set(c.event, list);
+  }
+  for (const r of rows) r.control_results = byEvent.get(r.id) ?? [];
+  return rows;
 }
 
 async function validateAccount(

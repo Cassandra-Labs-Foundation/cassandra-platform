@@ -100,38 +100,6 @@ Deno.test("dual_control_status is validated, and is what makes an approval id re
   assert(calls.length >= 0);
 });
 
-Deno.test("a wire read carries dual_control_status — without it an approval id says nothing", async () => {
-  // GET /eps/pending-approvals hands out a resource_id and nothing else. If the
-  // wire it points at came back without this field there would still be no way
-  // to tell an approved wire from one still waiting, which is the whole reason
-  // these endpoints exist.
-  const { db } = listDb([{
-    id: "wire_1",
-    amount: 500000,
-    status: "pending_approval",
-    dual_control_status: "required",
-    beneficiary: { name: "ACME" },
-    purpose: null,
-    imad: null,
-    return_reason: null,
-    control_results: [{ control_id: "EPS-06", decision: "hold" }],
-    blnk_transaction_id: null,
-    blnk_reference: null,
-    created_at: "2026-07-20T00:00:00Z",
-  }]);
-  const res = await getWireTransfers(new Request("https://x/wire-transfers"), db, "r5", TEST_CTX);
-  const body = await res.json();
-  assertEquals(res.status, 200);
-  assertEquals(body.data[0].dual_control_status, "required");
-  assertEquals(body.data[0].amount_cents, 500000);
-  // control_results survive the read rather than being flattened to a decision
-  assertEquals(body.data[0].control_results[0].control_id, "EPS-06");
-  // the spec's nested envelope, not a flat one
-  assertEquals(body.pagination.has_more, false);
-});
-
-// ------------------------------------------------------------- uuid-keyed ids
-
 Deno.test("a malformed id on a uuid-keyed rail is 404, not 500", async () => {
   // core.wire_transfer and core.ach_transfer key on uuid; account, transfer,
   // card_authorization and loan_application all key on text. On the text tables

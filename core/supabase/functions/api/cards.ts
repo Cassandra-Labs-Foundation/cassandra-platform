@@ -1,7 +1,7 @@
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type AccountRow } from "./accounts.ts";
 import { type EvidenceScope, provenanceFor } from "./bsa.ts";
-import { type GateResource, recordMovementArtifacts, runGate } from "./transfers.ts";
+import { attachControlResults, type GateResource, recordMovementArtifacts, runGate } from "./transfers.ts";
 import {
   type BlnkConfig,
   BlnkError,
@@ -693,9 +693,9 @@ export async function getCards(
     (data ?? []) as unknown as Record<string, unknown>[],
     limit,
   );
-  const rows = page as unknown as (CardAuthRow & {
+  const rows = await attachControlResults(db, page as unknown as (CardAuthRow & {
     control_results?: { control_id: string; decision: string }[] | null;
-  })[];
+  })[]);
   return jsonResponse(
     pageEnvelope(rows.map((r) => cardResponse(r, r.control_results ?? [])), {
       limit,
@@ -722,8 +722,8 @@ export async function getCard(
   ).maybeSingle();
   if (error) return internalErrorResponse(requestId, error);
   if (!data) return notFoundResponse(requestId, "card_authorization", cardId);
-  const row = data as unknown as CardAuthRow & {
+  const [row] = await attachControlResults(db, [data as unknown as CardAuthRow & {
     control_results?: { control_id: string; decision: string }[] | null;
-  };
+  }]);
   return jsonResponse(cardResponse(row, row.control_results ?? []), 200, requestId);
 }

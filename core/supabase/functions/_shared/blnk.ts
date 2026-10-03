@@ -68,6 +68,8 @@ export interface BlnkBalance {
   balance?: number;
   credit_balance?: number;
   debit_balance?: number;
+  /** money held by pending inflight debits — spoken for, not yet moved */
+  inflight_debit_balance?: number;
   identity_id?: string;
   meta_data?: Record<string, unknown> | null;
   [k: string]: unknown;
@@ -344,10 +346,9 @@ async function commitInflightInner(
     // terms) on the money path — caught by the phase-0 float guard.
     body.precise_amount = opts.amountCents;
   }
-  return await request<BlnkTransaction>(
+  return await inflightPut(
     cfg,
-    "PUT",
-    `/transactions/inflight/${transactionId}`,
+    transactionId,
     body,
   );
 }
@@ -356,12 +357,41 @@ export async function voidInflight(
   cfg: BlnkConfig,
   transactionId: string,
 ): Promise<BlnkTransaction> {
-  return await request<BlnkTransaction>(
-    cfg,
-    "PUT",
-    `/transactions/inflight/${transactionId}`,
-    { status: "void" },
-  );
+  return await inflightPut(cfg, transactionId, { status: "void" });
+}
+
+/**
+ * PUT /transactions/inflight/{id}, retried while Blnk is still applying an
+ * earlier commit/void on the same hold.
+ *
+ * Blnk applies an inflight commit asynchronously and refuses the next commit
+ * or void on that hold with 409 GEN_CONFLICT "a commit or void is already
+ * queued" until it has — live-measured at up to ~3s. Merchants capture
+ * incrementally and reverse straight after a capture, so surfacing that as a
+ * bank_error failed real card flows at random (caught by the partner-flow
+ * suite). The refused request was never applied, so retrying it is safe.
+ */
+const INFLIGHT_RETRY_DELAYS_MS = [250, 500, 1000, 1500, 2000, 2500];
+
+async function inflightPut(
+  cfg: BlnkConfig,
+  transactionId: string,
+  body: Record<string, unknown>,
+): Promise<BlnkTransaction> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request<BlnkTransaction>(cfg, "PUT", `/transactions/inflight/${transactionId}`, body);
+    } catch (e) {
+      if (!isQueuedConflict(e) || attempt >= INFLIGHT_RETRY_DELAYS_MS.length) throw e;
+      await new Promise((r) => setTimeout(r, INFLIGHT_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
+function isQueuedConflict(e: unknown): boolean {
+  if (!(e instanceof BlnkError) || e.status !== 409) return false;
+  const detail = (e.body as { error_detail?: { code?: string } } | null)?.error_detail;
+  return detail?.code === "GEN_CONFLICT";
 }
 
 export function transactionMirror(t: BlnkTransaction): TransactionMirror {
