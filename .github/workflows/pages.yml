@@ -8,9 +8,7 @@
 # Pages serves from a `workflow` source (not "deploy from branch"): this job
 # stages the files under _site and uploads that. docs/pages-root.html becomes
 # the site index so the bare URL routes instead of 404ing, and /architecture/
-# is docs/architecture/ verbatim — its index.html is a client-side VIEW that
-# fetches and renders the sibling markdown, so the published site can never
-# drift from the files in the repo.
+# is the interactive viewer plus its manually reviewed model and local assets.
 name: pages
 
 on:
@@ -19,6 +17,7 @@ on:
     paths:
       - "docs/architecture/**"
       - "docs/pages-root.html"
+      - "scripts/check_architecture.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -42,16 +41,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Validate architecture snapshot and navigation
+        run: |
+          python3 scripts/check_architecture.py
+          node --test docs/architecture/navigation.test.mjs
+
       - name: Stage the architecture tour one level down
         run: |
           set -euo pipefail
           mkdir -p _site/architecture
-          cp docs/architecture/index.html docs/architecture/*.md _site/architecture/
+          cp docs/architecture/index.html docs/architecture/*.md docs/architecture/*.css docs/architecture/*.json _site/architecture/
+          cp docs/architecture/explorer.mjs docs/architecture/navigation.mjs _site/architecture/
           cp docs/pages-root.html _site/index.html   # the bare URL routes, not 404s
           # Fail loudly rather than deploying an empty site.
           test -f _site/index.html
           test -f _site/architecture/index.html
           test -f _site/architecture/README.md
+          test -f _site/architecture/model.json
+          test -f _site/architecture/explorer.mjs
           echo "staged $(find _site -type f | wc -l) files"
 
       - uses: actions/configure-pages@v5

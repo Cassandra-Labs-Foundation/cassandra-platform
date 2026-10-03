@@ -33,3 +33,6 @@ jobs:
 
       - name: Hand-written docs agree with the artifacts
         run: python3 scripts/check_doc_claims.py
+
+      - name: Architecture sources still match the reviewed snapshot
+        run: python3 scripts/check_architecture.py

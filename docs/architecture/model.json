@@ -1,0 +1,441 @@
+{
+  "nodes": {
+    "velocity": {
+      "stage": "detect",
+      "kind": "Precondition",
+      "title": "Daily outflow within $25,000?",
+      "sub": "Earlier gate includes this movement",
+      "tech": "runGate · cross-rail daily sum",
+      "intent": "Monitoring should identify activity that needs review. The entry conditions determine which movements reach this detector.",
+      "behavior": "The API first totals today’s qualifying outgoing movements across four rails. If the total including this movement exceeds $25,000, it blocks and returns before the large-movement detector.",
+      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. The book-transfer handler also has a safe-mode gate before runGate. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
+      "file": "core/supabase/functions/api/transfers.ts",
+      "line": 113,
+      "test": "transfers.test.ts",
+      "testline": 155,
+      "contract": "Reads transfer, wire_transfer, ach_transfer and card_authorization. Uses UTC day boundaries and selected statuses; it is not a rolling 24-hour window."
+    },
+    "threshold": {
+      "stage": "detect",
+      "kind": "Rule",
+      "title": "Movement greater than $10,000?",
+      "sub": "Strictly greater • one movement",
+      "tech": "amountCents > 1_000_000 · CG-LGTXN-01",
+      "intent": "BSA-06 calls for monitoring to generate alerts for review. This amount rule is one implementation choice, not the full policy.",
+      "behavior": "A movement greater than $10,000 creates a passing control result and calls the alert writer. Exactly $10,000 does not match this rule.",
+      "boundary": "The alert is named ctr_threshold in code. That name alone does not demonstrate that cash reporting obligations are satisfied.",
+      "file": "core/supabase/functions/api/transfers.ts",
+      "line": 176,
+      "test": "transfers.test.ts",
+      "testline": 135,
+      "contract": "Writes control_result with decision=pass. subject_ref is the source account; entity_hash is SHA-256 of the source account ID."
+    },
+    "blocked": {
+      "stage": "detect",
+      "kind": "Exit",
+      "title": "Block the movement",
+      "sub": "Large-movement rule is not reached",
+      "tech": "CG-VEL-01 · HTTP 422",
+      "intent": "The policy-to-implementation review needs to account for paths that end before alert generation.",
+      "behavior": "Records a blocking velocity result, updates the movement to its rail-specific rejection status, and returns an error.",
+      "boundary": "This is a neighboring payment gate, included here because it changes this control’s reach.",
+      "file": "core/supabase/functions/api/transfers.ts",
+      "line": 147,
+      "test": "transfers.test.ts",
+      "testline": 155,
+      "contract": "Returns blocked=true and velocity_limit_exceeded. Writes are awaited and errors throw."
+    },
+    "alert": {
+      "stage": "detect",
+      "kind": "Action",
+      "title": "Open an alert for review",
+      "sub": "Start the two-business-day clock",
+      "tech": "raiseAlert → bsa_alert + events",
+      "intent": "Each alert should be triaged within two business days of creation.",
+      "behavior": "Writes the causing event, an open alert with its triage deadline, then a timer event. The same movement and alert type produce a stable alert ID.",
+      "boundary": "The calendar skips weekends, but not federal holidays. Creating an alert does not itself stop the payment; later payment gates still apply.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 206,
+      "test": "bsa.test.ts",
+      "testline": 114,
+      "contract": "Ordered upserts: bsa_alert.created → bsa_alert → bsa_alert.triage.timer. Duplicate IDs are ignored. Any write error throws; these are separate writes."
+    },
+    "skip": {
+      "stage": "detect",
+      "kind": "Continue",
+      "title": "No alert from this rule",
+      "sub": "Other monitoring rules still apply",
+      "tech": "CG-LGTXN-01 branch skipped",
+      "intent": "The overall monitoring obligation may be served by several detectors with different scopes.",
+      "behavior": "Amounts at or below $10,000 skip this detector. Subsequent structuring and other payment checks can still run.",
+      "boundary": "“No alert from this rule” does not mean the movement is safe, compliant, or guaranteed to settle.",
+      "file": "core/supabase/functions/api/transfers.ts",
+      "line": 205,
+      "test": "transfers.test.ts",
+      "testline": 145,
+      "contract": "Control returns to the remainder of runGate. This branch is not the end of payment processing."
+    },
+    "access": {
+      "stage": "triage",
+      "kind": "Permission",
+      "title": "An investigator opens the alert",
+      "sub": "Internal actor + Investigations role",
+      "tech": "postAlertTriage · bsa_investigator",
+      "intent": "BSA-06 assigns opening and closing cases to the Investigations role.",
+      "behavior": "Partner requests receive 404. Internal actors without the required role receive 403. An already-triaged alert replays the original result.",
+      "boundary": "The diagram shows authorization at this endpoint. It does not establish the integrity of every credential or identity source.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 273,
+      "test": "bsa.test.ts",
+      "testline": 406,
+      "contract": "POST /bsa/alerts/{id}/triage. Loads the alert by ID; a missing alert returns 404. Previously triaged rows are not re-decided."
+    },
+    "triage": {
+      "stage": "triage",
+      "kind": "Human decision",
+      "title": "Does this alert need investigation?",
+      "sub": "Investigator chooses an outcome",
+      "tech": "outcome = resolved | escalated",
+      "intent": "Alerts should be triaged within two business days. Alerts unresolved at triage should escalate to a case.",
+      "behavior": "The API accepts an investigator’s resolved or escalated outcome. Resolving requires a nonempty explanation; escalation opens an investigation.",
+      "boundary": "This endpoint records a human judgment. It does not determine whether the explanation is substantively adequate or automatically escalate when time expires.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 285,
+      "test": "bsa.test.ts",
+      "testline": 209,
+      "contract": "Validates outcome before writes. A resolved outcome without note returns a validation error."
+    },
+    "resolve": {
+      "stage": "triage",
+      "kind": "Outcome",
+      "title": "Close with an explanation",
+      "sub": "No investigation is opened",
+      "tech": "status=closed · bsa_alert.triaged",
+      "intent": "The review should leave enough evidence to understand why an alert did not become a case.",
+      "behavior": "Marks the alert triaged and closed. Attempts to emit a triage event containing the note and outcome.",
+      "boundary": "The note is carried by the event, not the alert update. If event emission fails, the handler logs it and still returns success after the alert update.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 322,
+      "test": "bsa.test.ts",
+      "testline": 220,
+      "contract": "Alert patch stores triaged_at, triage_outcome and status. emitBsaEvent is inside a catch-and-log block."
+    },
+    "case": {
+      "stage": "triage",
+      "kind": "Action",
+      "title": "Open an investigation",
+      "sub": "Decision due 30 or 60 days from detection",
+      "tech": "case.insert · sar_decision_due_at",
+      "intent": "Unresolved alerts should become cases. Reach a SAR or no-SAR decision within 30 days of initial detection, or 60 if no suspect is identified.",
+      "behavior": "Creates a case linked to the alert and carries alert details as evidence. Uses 60 days when the request says no suspect; otherwise 30. The clock starts at alert creation.",
+      "boundary": "The no-suspect flag comes from the caller. Event emission failures are logged; the case insert and alert update are separate writes.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 332,
+      "test": "bsa.test.ts",
+      "testline": 182,
+      "contract": "Records opened_by=ctx.tokenId. Writes case.sar.decision.timer and case.opened events, then associates the case with the alert."
+    },
+    "officer": {
+      "stage": "decide",
+      "kind": "Permission",
+      "title": "BSA Officer authorization",
+      "sub": "Required role; compare the case opener’s token",
+      "tech": "bsa_officer · opened_by ≠ tokenId",
+      "intent": "BSA-06 gives the BSA Officer write access to SAR decisions. The implementation also checks separation from the case opener.",
+      "behavior": "Requires the BSA Officer role. If opened_by is populated and matches the deciding token, refuses the decision even if the token has both roles. A missing opener is not refused by this comparison.",
+      "boundary": "The handler compares token IDs. Confirm how credentials map to people before treating this as proof that two different people acted.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 417,
+      "test": "bsa.test.ts",
+      "testline": 442,
+      "contract": "Same opener token returns HTTP 409 segregation_of_duties. A decided case replays its result; another closed case is rejected."
+    },
+    "decision": {
+      "stage": "decide",
+      "kind": "Human decision",
+      "title": "File a SAR or do not file?",
+      "sub": "A written rationale is required either way",
+      "tech": "decision = file | no_file",
+      "intent": "The policy calls for a documented SAR/no-SAR decision and committee review, with filings reported to the Board.",
+      "behavior": "Accepts the officer’s decision and rationale, closes the case, and records the deciding actor and any supplied concurrence list.",
+      "boundary": "Committee concurrence is recorded, but quorum and composition are not enforced in this handler. Board reporting is not established by this traced path.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 429,
+      "test": "bsa.test.ts",
+      "testline": 486,
+      "contract": "concurred_by defaults to an empty list. Lateness is computed from sar_decision_due_at and included in the response and decision-event payload."
+    },
+    "file": {
+      "stage": "decide",
+      "kind": "Recorded outcome",
+      "title": "Record “file”",
+      "sub": "Close case; start SAR retention workflow",
+      "tech": "sar.filed · startRetentionFor",
+      "intent": "A filing decision should connect to filing, supporting records and the policy’s reporting duties.",
+      "behavior": "The handler attempts to emit investigation-complete and sar.filed events, then starts the SAR retention workflow.",
+      "boundary": "The event name is not proof of external SAR submission. This function records a decision; external filing is outside this trace. Event or retention failures are logged without failing the saved decision.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 500,
+      "test": "bsa.test.ts",
+      "testline": 253,
+      "contract": "Case update precedes events. The file branch calls startRetentionFor(db, \"sar\", caseId, …)."
+    },
+    "nofile": {
+      "stage": "decide",
+      "kind": "Recorded outcome",
+      "title": "Record “do not file”",
+      "sub": "Close case and preserve rationale",
+      "tech": "sar.decision_no_file",
+      "intent": "Do-not-file decisions must be documented and retained.",
+      "behavior": "Stores the rationale on the case and attempts to emit investigation-complete and no-file decision events.",
+      "boundary": "This branch does not call the SAR-specific retention helper. That alone does not establish whether other retention rules cover the case.",
+      "file": "core/supabase/functions/api/bsa.ts",
+      "line": 500,
+      "test": "bsa.test.ts",
+      "testline": 268,
+      "contract": "decision_rationale is saved with the closed case before event emission. Event failures are caught and logged."
+    }
+  },
+  "groups": {
+    "detect": {
+      "title": "Large-movement detection",
+      "sub": "Payment gate · threshold · alert creation",
+      "input": "Movement that reaches runGate",
+      "output": "An open monitoring alert",
+      "selected": "threshold"
+    },
+    "triage": {
+      "title": "Alert triage & investigation",
+      "sub": "Investigator access · resolve · open case",
+      "input": "An open monitoring alert",
+      "output": "Closed alert or an investigation",
+      "selected": "triage"
+    },
+    "decide": {
+      "title": "SAR decision & record",
+      "sub": "Officer authorization · decision · evidence",
+      "input": "An investigation",
+      "output": "A recorded SAR or no-SAR decision",
+      "selected": "decision"
+    }
+  },
+  "internals": {
+    "velocity": [
+      [
+        "Read today’s outgoing amounts",
+        "Four rails; selected statuses; UTC day"
+      ],
+      [
+        "Add the proposed movement",
+        "Exclude its existing row from the prior sum"
+      ],
+      [
+        "Compare against $25,000",
+        "Above → block and return · Otherwise → continue"
+      ]
+    ],
+    "threshold": [
+      [
+        "Compare one amount with $10,000",
+        "Exactly $10,000 does not match"
+      ],
+      [
+        "Above threshold → save control result",
+        "CG-LGTXN-01 · decision = pass"
+      ],
+      [
+        "Create the alert",
+        "Hash source account ID; call raiseAlert"
+      ]
+    ],
+    "blocked": [
+      [
+        "Save the blocking result",
+        "CG-VEL-01 · decision = block"
+      ],
+      [
+        "Reject the movement",
+        "Uses the rejection status for its rail"
+      ],
+      [
+        "Return to the caller",
+        "HTTP 422 · later detector is not reached"
+      ]
+    ],
+    "alert": [
+      [
+        "Write the causing event",
+        "bsa_alert.created · deterministic ID"
+      ],
+      [
+        "Write the open alert",
+        "Reference event; calculate triage deadline"
+      ],
+      [
+        "Write the triage timer event",
+        "bsa_alert.triage.timer · two business days"
+      ]
+    ],
+    "skip": [
+      [
+        "Skip this amount detector",
+        "Amount at or below $10,000"
+      ],
+      [
+        "Continue the payment gate",
+        "Structuring and subsequent checks remain"
+      ]
+    ],
+    "access": [
+      [
+        "Reject partner access",
+        "Partner → 404"
+      ],
+      [
+        "Require Investigations role",
+        "Missing role → 403"
+      ],
+      [
+        "Validate request and load the alert",
+        "Invalid input or missing alert → refuse"
+      ],
+      [
+        "Check for previous triage",
+        "Already triaged → replay; otherwise continue"
+      ]
+    ],
+    "triage": [
+      [
+        "Read the submitted outcome",
+        "Only resolved or escalated accepted"
+      ],
+      [
+        "For resolved: require a note",
+        "Empty explanation → validation error"
+      ],
+      [
+        "Apply the investigator’s choice",
+        "Resolved → close alert · Escalated → open case"
+      ]
+    ],
+    "resolve": [
+      [
+        "Save the alert outcome",
+        "Closed; triaged timestamp and outcome"
+      ],
+      [
+        "Attempt to write the explanation event",
+        "bsa_alert.triaged contains the note"
+      ],
+      [
+        "Return the updated alert",
+        "Event failure is logged, not returned as a failure"
+      ]
+    ],
+    "case": [
+      [
+        "Read the alert creation time",
+        "Detection time is the clock’s starting point"
+      ],
+      [
+        "Choose the decision deadline",
+        "no_suspect=true → 60 days; otherwise 30"
+      ],
+      [
+        "Insert the case",
+        "Alert evidence; opener token; deadline"
+      ],
+      [
+        "Attempt case and timer events",
+        "Event failure is caught and logged"
+      ],
+      [
+        "Link the case to the alert",
+        "Separate alert update after case creation"
+      ]
+    ],
+    "officer": [
+      [
+        "Reject partner access",
+        "Partner → 404"
+      ],
+      [
+        "Require the BSA Officer role",
+        "Missing role → 403"
+      ],
+      [
+        "Validate request and load case",
+        "Decision and rationale required; missing case → 404"
+      ],
+      [
+        "Check existing decision and case state",
+        "Decided → replay; otherwise closed → 409"
+      ],
+      [
+        "Compare opener and deciding token",
+        "Populated opener matches → 409; otherwise → continue"
+      ]
+    ],
+    "decision": [
+      [
+        "Validate decision and rationale",
+        "file or no_file; nonempty rationale"
+      ],
+      [
+        "Calculate whether the decision is late",
+        "Compare now with the case’s deadline"
+      ],
+      [
+        "Save the decision on the closed case",
+        "Decider token; rationale; supplied concurrence list"
+      ],
+      [
+        "Attempt investigation and outcome events",
+        "Concurrence composition is not validated"
+      ]
+    ],
+    "file": [
+      [
+        "After the case update: emit completion",
+        "case.investigation_complete"
+      ],
+      [
+        "Emit the filing decision event",
+        "sar.filed; does not prove external submission"
+      ],
+      [
+        "Attempt SAR retention workflow",
+        "Separate error handler; failures logged"
+      ]
+    ],
+    "nofile": [
+      [
+        "After the case update: emit completion",
+        "case.investigation_complete"
+      ],
+      [
+        "Emit the no-file decision event",
+        "sar.decision_no_file; rationale saved on case"
+      ]
+    ]
+  },
+  "snapshot": {
+    "revision": "4da737a9f74f0db3c5b3b41c0e692be14e1b8440",
+    "reviewedAt": "2026-10-03",
+    "method": "Manual source trace",
+    "sources": {
+      "core/supabase/functions/api/transfers.ts": "5c6ea984478a6fed6d6885d61638128cc5790bb352cb2d9fe0e13e3b8027d029",
+      "core/supabase/functions/api/transfers.test.ts": "036baca453c36213cb37e10e65e5df0a98707cc7d39fb89272dc5bdb9c9d109a",
+      "core/supabase/functions/api/bsa.ts": "7bc2ff6efd4e92dc01d62789f0df11fa950c473f01690769b6e9fefab7fab4e8",
+      "core/supabase/functions/api/bsa.test.ts": "9fd5fff0cea6f44c5222b02eb35d8529568092f83f00bc6d1a767874f8727d61",
+      "compliance/policies/bsa/bsa.md": "86c729ae3ed00a0132d8d2044c1cdd15d1e36ebebf71840fa8239795291a1bd9",
+      "core/supabase/functions/api/index.ts": "8f3a0358ad43f2c06d2b5691ad0af37f0a8174449c61ec8e22197fd8b1f8907e",
+      "core/supabase/functions/api/auth.ts": "16592020060175d0c0e696201743ead99875834c222a8ef6a8b42a709e3b928f",
+      "core/supabase/functions/api/ach.ts": "8e7ee5f589ce9c66ffdee301f1869140fc57cd25deaeb3579f36a3f873c4ba8d",
+      "core/supabase/functions/api/wires.ts": "8c6dbd15f4907cb39dc66eccc2d6d9bfebd7d71f9966a5be4bf342e299cca971",
+      "core/supabase/functions/api/cards.ts": "4cf0f2fb9c325baaeb984c37e05c354ba48c9428ce7ec3748f05d9f967b38e29",
+      "core/supabase/functions/api/cda.ts": "5dccb8f7660e9cfa2c81bf206f27f72a4675dd98e97336a9eeded50a6a0c04f3",
+      "scripts/rebuild_artifacts.sh": "35f73afe052fef60086e626038e9a2616a11022c164277799da19adcea304d32"
+    }
+  }
+}
