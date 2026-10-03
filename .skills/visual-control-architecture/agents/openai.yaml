@@ -1,0 +1,4 @@
+interface:
+  display_name: "Visual Control Architecture"
+  short_description: "Inspect policy-to-code through nested visual diagrams"
+  default_prompt: "Use $visual-control-architecture to build a source-grounded, drill-down view of one backend control."
