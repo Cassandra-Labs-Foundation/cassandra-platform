@@ -2,9 +2,10 @@
 // accounts, then moves more than $10,000 between them. The transfer must settle
 // (the control is alert-only) AND leave the BSA evidence behind: a CG-LGTXN-01
 // control_result for the transfer and a ctr_threshold bsa_alert naming it.
+// A BSA investigator then picks the alert up and escalates it into a case.
 // (CG-CTR-01 is the CASH control — a book transfer is not currency, so the
 // electronic large-transaction control is the one that must fire.)
-import { api, assert, assertEq, core, flow, personaName } from "./helpers.ts";
+import { actor, api, assert, assertEq, core, flow, personaName } from "./helpers.ts";
 
 const OPENING = 5_000_000; // $50,000
 const CTR_AMOUNT = 1_100_000; // $11,000 — over the $10k currency-transaction line
@@ -54,6 +55,7 @@ flow("partner flow: onboard → KYC → open + fund → $11k transfer → large-
 
   const [sender, receiver] = members;
   let transferId = "";
+  let alertId = "";
 
   await t.step("send $11,000 sender → receiver: settles, CG-LGTXN-01 reported", async () => {
     const r = await api("POST", "/transfers", {
@@ -91,5 +93,29 @@ flow("partner flow: onboard → KYC → open + fund → $11k transfer → large-
       .select("id, alert_type").eq("alert_type", "ctr_threshold").like("details", `%${transferId}%`);
     assert(!alert.error, `bsa_alert read: ${alert.error?.message}`);
     assert((alert.data ?? []).length > 0, "ctr_threshold bsa_alert raised naming the transfer");
+    alertId = String(alert.data![0].id);
+  });
+
+  await t.step("only an investigator may triage: operations is refused", async () => {
+    const r = await api("POST", `/bsa/alerts/${alertId}/triage`, { outcome: "escalated" });
+    assertEq(r.status, 403, `ops triage (${JSON.stringify(r.body).slice(0, 200)})`);
+  });
+
+  await t.step("the investigator escalates the alert into a case", async () => {
+    const investigator = await actor("cu_admin", ["bsa_investigator"]);
+    const r = await api("POST", `/bsa/alerts/${alertId}/triage`,
+      { outcome: "escalated", note: "flow: $11k book transfer between new members" },
+      { key: investigator });
+    assertEq(r.status, 200, `triage (${JSON.stringify(r.body).slice(0, 300)})`);
+
+    const a = await core().from("bsa_alert").select("status, case_id").eq("id", alertId).single();
+    assertEq(a.data?.status, "escalated", "alert status");
+    assert(a.data?.case_id, "alert points at its case");
+    const c = await core().from("case")
+      .select("status, opened_by, sar_decision_due_at, provenance").eq("id", a.data!.case_id).single();
+    assertEq(c.data?.status, "opened", "case status");
+    assert(String(c.data?.opened_by).startsWith("tok_test_"), `case opened by the test investigator (${c.data?.opened_by})`);
+    assert(c.data?.sar_decision_due_at, "SAR decision clock started");
+    assertEq(c.data?.provenance, "demo", "test-actor evidence is labelled demo, not production");
   });
 });

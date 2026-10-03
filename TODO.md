@@ -608,3 +608,14 @@ Ordered by correctness-per-hour.
       a language. No action needed until the sweeps start timing out or the
       drill outgrows its window; flagged here so the trigger is recognized
       when it arrives rather than diagnosed as "TypeScript is too slow."
+
+## 12. E2E flows in CI — deferred 2026-10-03
+
+- [ ] **Run `core/verifier/flows/` automatically.** The flows are run by hand
+      for now, against the deployed core, with `scripts/flow.sh`. Turned off
+      in CI on purpose so it doesn't slow the replacement of the stubbed
+      handler tests. When picked up, the agreed target is every push and PR on
+      a local stack (`supabase start` + a Blnk container, seeded partner and
+      key), plus a nightly run against the deployed core. Until then, a push
+      runs only the stubbed tests and gates — nothing exercises real
+      behaviour unless someone runs the flows.

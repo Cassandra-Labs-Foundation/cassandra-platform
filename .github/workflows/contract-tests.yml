@@ -1,5 +1,4 @@
-# The black-box contract suite (core/verifier/contract/, TEST-CATALOG.md) and
-# the partner-flow suite (core/verifier/flows/)
+# The black-box contract suite (core/verifier/contract/, TEST-CATALOG.md)
 # against the DEPLOYED core. Same guard pattern as smoke.yml / the live tier:
 # skip cleanly until the secret exists, never fail the schedule for a missing
 # credential. Additive isolation — the suite creates run-unique fixtures and
@@ -44,12 +43,3 @@ jobs:
           DEMO_API_KEY: ${{ secrets.DEMO_API_KEY }}
         run: deno test --allow-net --allow-env core/verifier/contract/
 
-      # Whole partner journeys (core/verifier/flows/), checked down to the
-      # evidence rows. Self-skips until the service-role secrets exist too.
-      - name: Partner flows — onboard to money movement, evidence on the database
-        if: steps.guard.outputs.run == 'true'
-        env:
-          DEMO_API_KEY: ${{ secrets.DEMO_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: deno test --allow-net --allow-env core/verifier/flows/

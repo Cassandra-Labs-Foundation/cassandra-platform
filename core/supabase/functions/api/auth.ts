@@ -20,6 +20,9 @@
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { apiError, serviceUnavailableResponse, sha256Hex, timingSafeEqual } from "./lib.ts";
 
+/** token_prefix of actors minted by the E2E flow harness; their evidence is `demo`. */
+export const TEST_TOKEN_PREFIX = "cass_test";
+
 /** D14 rate-limit tiers, used here as an authorization dimension. */
 export type Tier = "read" | "write" | "realtime" | "bulk";
 
@@ -363,7 +366,11 @@ export async function authenticate(
       // idempotency namespace — the token id gives them one.
       idempotencyScope: row.partner_id ?? `token:${row.id}`,
       ownerPartnerId,
-      evidenceProvenance: usedDemoKey ? "demo" : "production",
+      // Test actors minted by the E2E flow harness (core/verifier/flows/) write
+      // real evidence through real handlers, but it is manufactured traffic —
+      // label it like the bootstrap key's, never as production. Only the
+      // service role can insert api_token rows, so the prefix is not spoofable.
+      evidenceProvenance: usedDemoKey || row.token_prefix.startsWith(TEST_TOKEN_PREFIX) ? "demo" : "production",
     },
   };
 }
