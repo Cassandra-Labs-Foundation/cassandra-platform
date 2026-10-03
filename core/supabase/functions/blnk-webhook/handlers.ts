@@ -161,9 +161,13 @@ async function applyTransaction(db: SupabaseClient, d: BlnkTransactionData): Pro
 async function applyBalance(db: SupabaseClient, d: BlnkBalanceData): Promise<void> {
   const ref = coreRef(d);
   if (!ref || ref.table !== "account") return;
-  const patch: Record<string, unknown> = { blnk_balance_id: d.balance_id };
-  if (typeof d.balance === "number") { patch.balance = d.balance; patch.balance_synced_at = new Date().toISOString(); }
-  const { error } = await db.schema("core").from("account").update(patch).eq("id", ref.id);
+  // Link the id only — never copy the payload's balance. balance.created
+  // snapshots the balance at birth (always 0) and is delivered asynchronously,
+  // usually AFTER POST /accounts has posted the opening deposit and written the
+  // real figure, so copying it zeroed freshly funded accounts (caught live by
+  // the partner-flow suite). Moves refresh the mirror via refreshBalanceMirrors.
+  const { error } = await db.schema("core").from("account")
+    .update({ blnk_balance_id: d.balance_id }).eq("id", ref.id);
   if (error) throw new Error(`update account: ${error.message}`);
 }
 
