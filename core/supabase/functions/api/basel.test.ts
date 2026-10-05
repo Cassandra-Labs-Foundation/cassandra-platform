@@ -277,8 +277,56 @@ Deno.test("BC-13: a PIR drafted with no root cause is refused", async () => {
   assertEquals(res.status, 400);
 });
 
+Deno.test("BC-13: a PIR for an incident nobody declared is 404, and nothing is stored", async () => {
+  const dbx = makeDrillDb();
+  const res = await postPir(
+    req({ root_cause: "x", timeline: [{ at: "11:00Z" }] }), "inc_ghost", dbx.client, "t", CTX,
+  );
+  assertEquals(res.status, 404);
+  assertEquals((dbx.rows["core.pir"] ?? []).length, 0);
+});
+
+Deno.test("BC-11: comms on an unknown incident is 404; the initial issuance is the FIRST one", async () => {
+  const dbx = makeDrillDb();
+  await postCommsTree(
+    req({ contact_tree: { ic: ["ceo"] }, primary: "email", backup: "sms" }),
+    dbx.client, "t", CTX,
+  );
+  const ghost = await postIncidentComms(req({}), "inc_ghost", dbx.client, "t", CTX);
+  assertEquals(ghost.status, 404);
+  assertEquals(codes(dbx.rows).filter((c) => c.startsWith("comms.")).length, 0);
+
+  const inc = await postIncident(req({ title: "t", severity: "sev1" }), dbx.client, "t", CTX);
+  const id = String((await inc.json()).id);
+  await postIncidentComms(req({}), id, dbx.client, "t", CTX);
+  const first = dbx.rows["core.incident"].find((i) => i.id === id)!.comms_initial_issued_at;
+  assert(first);
+  await new Promise((r) => setTimeout(r, 5));
+  const refused = await postIncidentComms(req({ media_inquiry: true }), id, dbx.client, "t", CTX);
+  assertEquals(refused.status, 409);
+  await postIncidentComms(req({ platform_failed: true }), id, dbx.client, "t", CTX);
+  assertEquals(dbx.rows["core.incident"].find((i) => i.id === id)!.comms_initial_issued_at, first);
+});
+
+Deno.test("BA-04: a third version numbers past the superseded ones and never overwrites", async () => {
+  const dbx = makeDrillDb();
+  for (const [w, auth] of [[100, undefined], [75, "rule a"], [50, "rule b"]] as const) {
+    const r = await postRwaSchedule(
+      req({ risk_weight_map: { consumer: w }, approved_by: "cfo", change_authority: auth }),
+      dbx.client, "t", CTX,
+    );
+    assertEquals(r.status, 201);
+  }
+  const rows = dbx.rows["core.rwa_schedule"];
+  assertEquals(rows.map((r) => r.rwa_schedule_version).sort(), [1, 2, 3]);
+  assertEquals(rows.find((r) => r.rwa_schedule_version === 2)!.rwa_risk_weight_map.consumer, 75);
+  assertEquals(rows.filter((r) => r.superseded_at == null).map((r) => r.rwa_schedule_version), [3]);
+});
+
 Deno.test("BC-13: 'completed' is the owner's opinion; the RETEST is the evidence", async () => {
   const dbx = makeDrillDb();
+  // a PIR reviews a DECLARED incident
+  dbx.rows["core.incident"] = [{ id: "inc_1", title: "t", severity: "sev1", status: "open" }];
   await postPir(
     req({
       root_cause: "unrate-limited endpoint", timeline: [{ at: "11:00Z" }],

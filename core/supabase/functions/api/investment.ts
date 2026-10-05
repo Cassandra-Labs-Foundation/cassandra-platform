@@ -10,7 +10,7 @@ import { type PartnerContext } from "./auth.ts";
 import { type EvidenceScope, provenanceFor } from "./bsa.ts";
 import {
   apiError, internalErrorResponse, isNonEmptyString, jsonResponse, notFoundResponse,
-  parseJsonBody, validationError, type ValidationErrorItem,
+  parseJsonBody, selectAll, validationError, type ValidationErrorItem,
 } from "./lib.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -94,6 +94,69 @@ async function emit(
 }
 
 const plusDays = (f: Date, d: number) => new Date(f.getTime() + d * DAY_MS).toISOString();
+
+/**
+ * Every row matching a filter, not the first page of it. PostgREST caps an
+ * unbounded select at 1000 rows and says nothing, so a filtered register that
+ * feeds a count or a comparison is walked by `id` like `selectAll` does.
+ */
+async function selectAllWhere(
+  db: SupabaseClient, scope: EvidenceScope, table: string, columns: string,
+  // deno-lint-ignore no-explicit-any
+  where: (q: any) => any, pageSize = 1000,
+): Promise<Any[]> {
+  const rows: Any[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await where(db.schema(scope).from(table).select(columns))
+      .order("id", { ascending: true }).range(from, from + pageSize - 1);
+    if (error) throw new Error(`${table} read: ${error.message}`);
+    const page = (data ?? []) as Any[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
+/** An exact row count. Counting a fetched page under-reports past 1000. */
+async function countWhere(
+  db: SupabaseClient, scope: EvidenceScope, table: string,
+  // deno-lint-ignore no-explicit-any
+  where: (q: any) => any = (q) => q,
+): Promise<number> {
+  const { count, error } = await where(
+    db.schema(scope).from(table).select("id", { count: "exact", head: true }),
+  );
+  if (error) throw new Error(`${table} count: ${error.message}`);
+  return Number(count ?? 0);
+}
+
+/**
+ * The identity a duty is performed under is the AUTHENTICATED caller, never a
+ * name typed into the body. A body field naming the actor is kept only as an
+ * assertion the caller makes about itself: when it names someone else, the
+ * call is refused, because segregation of duties checked against a string the
+ * caller chose separates nothing.
+ */
+function actingIdentity(ctx: PartnerContext, claimed: string | null): {
+  actor: string; mismatch: boolean;
+} {
+  const actor = ctx.tokenId;
+  return { actor, mismatch: claimed !== null && claimed !== actor };
+}
+
+function actorMismatchResponse(requestId: string, field: string, step: string): Response {
+  return apiError(409, "trade_sod_violation", requestId, {
+    title: "segregation of duties",
+    detail: `${field} must be the authenticated caller — a ${step} is performed under the caller's own credential, not a name supplied in the request`,
+  });
+}
+
+/** A text-era 'true'/'false' and a real boolean read the same. */
+function asBool(v: unknown): boolean | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "boolean") return v;
+  const s = String(v).trim().toLowerCase();
+  return s === "true" || s === "t" ? true : s === "false" || s === "f" ? false : null;
+}
 
 // ------------------------------------------------------ IP-03 permissibility
 
@@ -220,12 +283,32 @@ export async function postSafekeepingReconciliation(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
-  // The custodian's statement is compared against OUR book. A reconciliation
-  // that reports the custodian's numbers back is not a reconciliation.
-  const { data: positions } = await db.schema(scope).from("position")
-    .select("id, security_id, par_cents");
+  if (!isNonEmptyString(body.intermediary_id)) {
+    return validationError(requestId, [{
+      type: "missing_field", field: "intermediary_id",
+      message: "a safekeeping statement is reconciled against one custodian",
+    }]);
+  }
+  const custodian = String(body.intermediary_id);
+
+  // The custodian's statement is compared against OUR book — the part of it
+  // held AT THIS CUSTODIAN. A reconciliation that reports the custodian's
+  // numbers back is not a reconciliation, and one compared against every
+  // position in the book reports other custodians' holdings as breaks.
+  //
+  // core.position records no custodian; the only link from a holding to where
+  // it is kept is the executed trade's intermediary. What we hold there is the
+  // net par of the executed trades booked through it.
+  const trades = await selectAllWhere(db, scope, "trade", "id, security_id, side, par_cents",
+    (q) => q.eq("intermediary_id", custodian).eq("decision", "executed"));
+  const net = new Map<string, number>();
+  for (const t of trades) {
+    const sec = String(t.security_id);
+    const d = t.side === "sell" ? -Number(t.par_cents ?? 0) : Number(t.par_cents ?? 0);
+    net.set(sec, (net.get(sec) ?? 0) + d);
+  }
   const ours = new Map<string, number>();
-  for (const p of positions ?? []) ours.set(String(p.security_id), Number(p.par_cents ?? 0));
+  for (const [sec, par] of net) if (par > 0) ours.set(sec, par);
 
   const theirs = (body.holdings ?? {}) as Record<string, number>;
   const breaks: { security_id: string; ours: number; theirs: number }[] = [];
@@ -237,9 +320,9 @@ export async function postSafekeepingReconciliation(
     if (!ours.has(sec)) breaks.push({ security_id: sec, ours: 0, theirs: Number(par) });
   }
 
-  const id = `skrec_${body.intermediary_id ?? "x"}_${crypto.randomUUID()}`;
+  const id = `skrec_${custodian}_${crypto.randomUUID()}`;
   await emit(db, scope, `ev_${id}`, "safekeeping.reconciliation.completed",
-    "intermediary", String(body.intermediary_id ?? "x"), {
+    "intermediary", custodian, {
       positions_compared: ours.size, breaks: breaks.length, break_detail: breaks.slice(0, 10),
     }, ctx);
   return jsonResponse({ data: { breaks: breaks.length } }, 200, requestId);
@@ -461,6 +544,9 @@ async function netWorthCents(db: SupabaseClient, scope: EvidenceScope): Promise<
 // --------------------------------------------------------- IP-11/14 trading
 
 export interface TradeGateVerdict {
+  /** the class and issuer the gate judged — the security master's, not the ticket's */
+  instrument_class: string;
+  issuer_ref: string;
   permissibility: "permissible" | "prohibited" | "unassessed";
   limit: "within" | "warning" | "breached" | "unassessed";
   reasons: string[];
@@ -488,7 +574,39 @@ export async function evaluateTradeGate(
 ): Promise<TradeGateVerdict> {
   const reasons: string[] = [];
 
-  const entry = await instrumentEntryInForce(db, scope, t.instrument_class, now);
+  // Classify by the SECURITY MASTER. The ticket's instrument_class and
+  // issuer_ref are what the trader says the security is; the gate exists to
+  // check that, so a ticket that relabels a prohibited security as a
+  // permitted class must not be able to choose its own verdict. A ticket that
+  // disagrees with the master is refused outright, and the master's labels
+  // are the ones every check below is run against.
+  const { data: sec } = await db.schema(scope).from("security")
+    .select("id, issuer_ref, instrument_class").eq("id", t.security_id).maybeSingle();
+  let instrumentClass = t.instrument_class;
+  let issuerRef = t.issuer_ref;
+  if (!sec) {
+    reasons.push("security_not_in_master");
+  } else {
+    if (sec.instrument_class != null) {
+      if (String(sec.instrument_class) !== t.instrument_class) {
+        reasons.push("instrument_class_disagrees_with_security_master");
+      }
+      instrumentClass = String(sec.instrument_class);
+    }
+    if (sec.issuer_ref != null) {
+      if (String(sec.issuer_ref) !== t.issuer_ref) {
+        reasons.push("issuer_disagrees_with_security_master");
+      }
+      issuerRef = String(sec.issuer_ref);
+    }
+  }
+
+  // IP-14: only an actor the role register holds for EXECUTION may execute.
+  // `executed_by` here is the authenticated caller (postTrade binds it).
+  const role = await userRole(db, scope, t.executed_by);
+  if (role !== "execution") reasons.push("executor_not_registered_for_execution");
+
+  const entry = await instrumentEntryInForce(db, scope, instrumentClass, now);
   let permissibility: TradeGateVerdict["permissibility"];
   if (!entry) {
     // An instrument class not on the list is NOT permissible by default. 12
@@ -517,23 +635,23 @@ export async function evaluateTradeGate(
     if (!im || im.approved !== true) reasons.push("intermediary_not_approved");
   }
 
-  // concentration, on the PROJECTED position
-  const { data: positions } = await db.schema(scope).from("position")
-    .select("id, security_id, par_cents");
-  const { data: secs } = await db.schema(scope).from("security")
-    .select("id, issuer_ref");
-  const byIssuer = new Map<string, number>();
-  const issuerOf = new Map<string, string>();
-  for (const s of secs ?? []) issuerOf.set(String(s.id), String(s.issuer_ref));
-  for (const p of positions ?? []) {
-    const iss = issuerOf.get(String(p.security_id));
-    if (iss) byIssuer.set(iss, (byIssuer.get(iss) ?? 0) + Number(p.par_cents ?? 0));
+  // concentration, on the PROJECTED position. Only this issuer's securities
+  // and their positions are read: a whole-book read is capped at 1000 rows by
+  // PostgREST and would sum an arbitrary subset once the book passes it.
+  const { data: issuerSecs } = await db.schema(scope).from("security")
+    .select("id").eq("issuer_ref", issuerRef);
+  const secIds = (issuerSecs ?? []).map((s: Any) => String(s.id));
+  let held = 0;
+  if (secIds.length > 0) {
+    const { data: positions } = await db.schema(scope).from("position")
+      .select("id, security_id, par_cents").in("security_id", secIds);
+    for (const p of positions ?? []) held += Number(p.par_cents ?? 0);
   }
   const delta = t.side === "buy" ? t.par_cents : -t.par_cents;
-  const projected = (byIssuer.get(t.issuer_ref) ?? 0) + delta;
+  const projected = held + delta;
 
   const nw = await netWorthCents(db, scope);
-  const limit = await limitInForce(db, scope, "issuer", t.issuer_ref, now);
+  const limit = await limitInForce(db, scope, "issuer", issuerRef, now);
   let limitVerdict: TradeGateVerdict["limit"];
   let exposureBp: number | null = null;
   if (!limit || nw === null || nw <= 0) {
@@ -554,7 +672,10 @@ export async function evaluateTradeGate(
     }
   }
 
-  return { permissibility, limit: limitVerdict, reasons, projected_par_cents: projected, exposure_bp: exposureBp };
+  return {
+    instrument_class: instrumentClass, issuer_ref: issuerRef,
+    permissibility, limit: limitVerdict, reasons, projected_par_cents: projected, exposure_bp: exposureBp,
+  };
 }
 
 /**
@@ -585,14 +706,26 @@ export async function postTrade(
   }
   if (errors.length > 0) return validationError(requestId, errors);
 
+  // IP-14: the executing trader IS the caller. `executed_by` stays on the
+  // ticket as the caller's statement of who it is; a ticket naming someone
+  // else is refused at the gate (recorded, like every other refusal).
+  const { actor, mismatch } = actingIdentity(ctx, String(body.executed_by));
+
   const now = new Date();
   const verdict = await evaluateTradeGate(db, scope, {
     security_id: String(body.security_id), instrument_class: String(body.instrument_class),
     issuer_ref: String(body.issuer_ref),
     intermediary_id: isNonEmptyString(body.intermediary_id) ? body.intermediary_id : null,
-    par_cents: par, side: String(body.side), executed_by: String(body.executed_by),
+    par_cents: par, side: String(body.side), executed_by: actor,
     maturity_months: typeof body.maturity_months === "number" ? body.maturity_months : null,
   }, now);
+  if (mismatch) verdict.reasons.push("executed_by_is_not_the_caller");
+  // A security the master does not hold cannot be traded, and a trade row
+  // naming it cannot be written (trade_security_id_fkey): answer 404, as the
+  // downgrade and fair-value routes do, before anything is recorded.
+  if (verdict.reasons.includes("security_not_in_master")) {
+    return notFoundResponse(requestId, "security", String(body.security_id));
+  }
 
   // IP-11: the pre-purchase checklist is a precondition, not a formality.
   const checklistDone = body.checklist_completed === true;
@@ -608,7 +741,7 @@ export async function postTrade(
     trade_date: isNonEmptyString(body.trade_date)
       ? body.trade_date
       : now.toISOString().slice(0, 10),
-    executed_by: body.executed_by,
+    executed_by: mismatch ? body.executed_by : actor,
     // IP-02/IP-05/IP-11 read these off the trade: what was bought, what it
     // settled for, and what the price was supported by. A trade recording only
     // par cannot evidence that the price was reasonable.
@@ -627,7 +760,7 @@ export async function postTrade(
   if (error) return internalErrorResponse(requestId, error.message);
 
   await emit(db, scope, `ev_${id}_perm`, "trade.permissibility.checked", "trade", id, {
-    verdict: verdict.permissibility, instrument_class: body.instrument_class,
+    verdict: verdict.permissibility, instrument_class: verdict.instrument_class,
   }, ctx);
   if (checklistDone) {
     await emit(db, scope, `ev_${id}_chk`, "trade.checklist.completed", "trade", id, {
@@ -640,7 +773,7 @@ export async function postTrade(
   }
   if (verdict.limit === "warning") {
     await emit(db, scope, `ev_${id}_warn`, "trade.limit_warning.issued", "trade", id, {
-      exposure_bp: verdict.exposure_bp, issuer_ref: body.issuer_ref,
+      exposure_bp: verdict.exposure_bp, issuer_ref: verdict.issuer_ref,
     }, ctx);
   }
 
@@ -650,7 +783,7 @@ export async function postTrade(
     }, ctx);
     if (verdict.permissibility !== "permissible") {
       await emit(db, scope, `ev_${id}_prohib`, "trade.blocked_prohibited", "trade", id, {
-        instrument_class: body.instrument_class, verdict: verdict.permissibility,
+        instrument_class: verdict.instrument_class, verdict: verdict.permissibility,
       }, ctx);
     }
     if (verdict.reasons.includes("intermediary_not_approved") ||
@@ -661,12 +794,12 @@ export async function postTrade(
     }
     if (verdict.limit === "breached") {
       await emit(db, scope, `ev_${id}_conc`, "concentration.limit_exceeded", "trade", id, {
-        issuer_ref: body.issuer_ref, exposure_bp: verdict.exposure_bp,
+        issuer_ref: verdict.issuer_ref, exposure_bp: verdict.exposure_bp,
       }, ctx);
       // IP-07: a breach opens a waiver case rather than being silently refused
       // — the refusal is right, but the Board may still need to decide.
       await emit(db, scope, `ev_${id}_waiver`, "concentration.waiver.opened", "trade", id, {
-        issuer_ref: body.issuer_ref, exposure_bp: verdict.exposure_bp,
+        issuer_ref: verdict.issuer_ref, exposure_bp: verdict.exposure_bp,
       }, ctx);
     }
     return apiError(409, "trade_blocked", requestId, {
@@ -690,7 +823,7 @@ export async function postTrade(
     security_id: body.security_id, par_cents: newPar, trade_id: id,
   }, ctx);
   await emit(db, scope, `ev_${id}_step`, "trade.step.recorded", "trade", id, {
-    step: "executed", actor: body.executed_by,
+    step: "executed", actor,
   }, ctx);
   await emit(db, scope, `ev_${id}_appr`, "trade.approval.requested", "trade", id, {
     security_id: body.security_id, par_cents: par,
@@ -731,12 +864,16 @@ export async function postTradeConfirmation(
     .select("id, executed_by, par_cents, decision").eq("id", tradeId).maybeSingle();
   if (!t) return notFoundResponse(requestId, "trade", tradeId);
 
-  const by = isNonEmptyString(body.confirmed_by) ? body.confirmed_by : null;
-  if (!by) {
+  const claimed = isNonEmptyString(body.confirmed_by) ? body.confirmed_by : null;
+  if (!claimed) {
     return validationError(requestId, [{
       type: "missing_field", field: "confirmed_by", message: "is required",
     }]);
   }
+  // IP-14: the confirmer is the authenticated caller. Segregation is checked
+  // against WHO IS CALLING, so the executing trader's own credential is
+  // refused here whatever name the body carries.
+  const { actor: by, mismatch } = actingIdentity(ctx, claimed);
   await db.schema(scope).from("trade").update({
     step_attempted: "confirmation", ticket: `tkt_${tradeId}`,
     updated_at: new Date().toISOString(),
@@ -762,6 +899,7 @@ export async function postTradeConfirmation(
       title: "segregation of duties", detail: "the executing trader cannot confirm this trade",
     });
   }
+  if (mismatch) return actorMismatchResponse(requestId, "confirmed_by", "confirmation");
 
   const cpPar = typeof body.counterparty_par_cents === "number"
     ? body.counterparty_par_cents
@@ -801,12 +939,14 @@ export async function postTradeReconciliation(
   const { data: t } = await db.schema(scope).from("trade")
     .select("id, executed_by, confirmed_by, confirmation_matched").eq("id", tradeId).maybeSingle();
   if (!t) return notFoundResponse(requestId, "trade", tradeId);
-  const by = isNonEmptyString(body.settled_by) ? body.settled_by : null;
-  if (!by) {
+  const claimed = isNonEmptyString(body.settled_by) ? body.settled_by : null;
+  if (!claimed) {
     return validationError(requestId, [{
       type: "missing_field", field: "settled_by", message: "is required",
     }]);
   }
+  // IP-14: the settler is the authenticated caller, as for the confirmation.
+  const { actor: by, mismatch } = actingIdentity(ctx, claimed);
   await db.schema(scope).from("trade").update({
     step_attempted: "settlement", ticket: `tkt_${tradeId}`,
     updated_at: new Date().toISOString(),
@@ -828,6 +968,7 @@ export async function postTradeReconciliation(
       title: "segregation of duties", detail: "the executing trader cannot settle this trade",
     });
   }
+  if (mismatch) return actorMismatchResponse(requestId, "settled_by", "settlement");
   const now = new Date();
   await db.schema(scope).from("trade").update({
     settled_by: by, reconciled_at: now.toISOString(), updated_at: now.toISOString(),
@@ -835,7 +976,7 @@ export async function postTradeReconciliation(
 
   await emit(db, scope, `ev_${tradeId}_recon`, "trade.reconciliation.completed",
     "trade", tradeId, {
-      settled_by: by, confirmation_matched: t.confirmation_matched ?? null,
+      settled_by: by, confirmation_matched: asBool(t.confirmation_matched),
     }, ctx);
   await emit(db, scope, `ev_${tradeId}_step3`, "trade.step.recorded", "trade", tradeId, {
     step: "settled", actor: by,
@@ -980,6 +1121,13 @@ export async function postFairValue(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
+  // An unknown security is 404 before anything is written or emitted, as a
+  // downgrade is: fair-value and impairment evidence about a security nobody
+  // holds is evidence of nothing.
+  const { data: sec } = await db.schema(scope).from("security")
+    .select("id").eq("id", securityId).maybeSingle();
+  if (!sec) return notFoundResponse(requestId, "security", securityId);
+
   const fv = typeof body.fair_value_cents === "number" ? body.fair_value_cents : NaN;
   if (!Number.isFinite(fv) || !isNonEmptyString(body.source)) {
     // A fair value with no source is a number somebody typed. The hierarchy is
@@ -1065,16 +1213,15 @@ export async function postLiquidityReport(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
-  // The figures are COMPUTED from the book, never supplied.
-  const { data: positions } = await db.schema(scope).from("position")
-    .select("id, security_id, par_cents");
-  const { data: secs } = await db.schema(scope).from("security")
-    .select("id, liquidity_class");
+  // The figures are COMPUTED from the book, never supplied — the WHOLE book,
+  // paged past PostgREST's 1000-row cap.
+  const positions = await selectAll<Any>(db, scope, "position", "id, security_id, par_cents");
+  const secs = await selectAll<Any>(db, scope, "security", "id, liquidity_class");
   const cls = new Map<string, string>();
-  for (const s of secs ?? []) cls.set(String(s.id), String(s.liquidity_class ?? "level_3"));
+  for (const s of secs) cls.set(String(s.id), String(s.liquidity_class ?? "level_3"));
 
   const buckets = { level_1: 0, level_2: 0, level_3: 0 } as Record<string, number>;
-  for (const p of positions ?? []) {
+  for (const p of positions) {
     const k = cls.get(String(p.security_id)) ?? "level_3";
     buckets[k] = (buckets[k] ?? 0) + Number(p.par_cents ?? 0);
   }
@@ -1230,21 +1377,21 @@ export async function postPortfolioReport(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
-  // Assembled from the book, like every other packet in this repo.
-  const { data: positions } = await db.schema(scope).from("position")
-    .select("id, par_cents, market_value_cents");
-  const { data: trades } = await db.schema(scope).from("trade")
-    .select("id, decision, limit_verdict");
-  const { data: excs } = await db.schema(scope).from("trade_exception").select("id, kind");
+  // Assembled from the book, like every other packet in this repo — all of
+  // it: an unpaged read stops at PostgREST's 1000 rows and the board would be
+  // shown a count over an arbitrary subset.
+  const positions = await selectAll<Any>(db, scope, "position", "id, par_cents, market_value_cents");
+  const tradesBlocked = await countWhere(db, scope, "trade", (q) => q.eq("decision", "blocked"));
+  const exceptions = await countWhere(db, scope, "trade_exception");
 
   const audience = body.audience === "board" ? "board" : "management";
   const id = `portrep_${audience}_${body.period ?? "p"}`;
   const payload = {
     period: body.period ?? null,
-    positions: (positions ?? []).length,
-    par_cents: (positions ?? []).reduce((n: number, p: Any) => n + Number(p.par_cents ?? 0), 0),
-    trades_blocked: (trades ?? []).filter((t: Any) => t.decision === "blocked").length,
-    exceptions: (excs ?? []).length,
+    positions: positions.length,
+    par_cents: positions.reduce((n: number, p: Any) => n + Number(p.par_cents ?? 0), 0),
+    trades_blocked: tradesBlocked,
+    exceptions,
   };
   await emit(db, scope, `ev_${id}`,
     audience === "board" ? "portfolio.board_report.issued" : "portfolio.management_report.issued",

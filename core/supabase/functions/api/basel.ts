@@ -74,9 +74,16 @@ export async function postRwaSchedule(
       message: "a schedule needs its weights and an approver",
     }]);
   }
-  const { data: prior } = await db.schema(scope).from("rwa_schedule")
-    .select("id, rwa_schedule_version").is("superseded_at", null);
-  const version = (prior ?? []).length + 1;
+  // The next version is one past the highest EVER issued — superseded rows
+  // included. Counting only the active rows would renumber (and upsert over) a
+  // version that already exists, losing its weights and the reproducibility
+  // the schedule exists for.
+  const { data: all, error: allErr } = await db.schema(scope).from("rwa_schedule")
+    .select("id, rwa_schedule_version, superseded_at");
+  if (allErr) return internalErrorResponse(requestId, allErr.message);
+  const rows = (all ?? []) as Array<{ id: string; rwa_schedule_version: number; superseded_at: string | null }>;
+  const prior = rows.filter((r) => r.superseded_at == null);
+  const version = rows.reduce((m, r) => Math.max(m, Number(r.rwa_schedule_version) || 0), 0) + 1;
   if (version > 1 && !isNonEmptyString(body.change_authority)) {
     // Changing a STATUTORY schedule is not an ordinary edit. Without the
     // authority under which it changed, nobody can tell a rule change from a
@@ -87,12 +94,9 @@ export async function postRwaSchedule(
     }]);
   }
   const now = new Date();
-  for (const p of prior ?? []) {
-    await db.schema(scope).from("rwa_schedule")
-      .update({ superseded_at: now.toISOString() }).eq("id", p.id);
-  }
   const id = `rwasched_v${version}`;
-  const { error } = await db.schema(scope).from("rwa_schedule").upsert({
+  // Insert, never upsert: an existing version is history and is not rewritten.
+  const { error } = await db.schema(scope).from("rwa_schedule").insert({
     id, rwa_schedule_version: version,
     rwa_risk_weight_map: body.risk_weight_map as Any,
     rwa_ccf_map: (body.ccf_map ?? {}) as Any,
@@ -105,8 +109,15 @@ export async function postRwaSchedule(
     approved_at: now.toISOString(), approved_by: body.approved_by,
     effective_at: now.toISOString(), superseded_at: null,
     provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" });
+  });
   if (error) return internalErrorResponse(requestId, error.message);
+  // Supersede the prior version only once its successor is on file, so a
+  // failed write never leaves the book with no active schedule.
+  for (const p of prior) {
+    const { error: supErr } = await db.schema(scope).from("rwa_schedule")
+      .update({ superseded_at: now.toISOString() }).eq("id", p.id);
+    if (supErr) return internalErrorResponse(requestId, supErr.message);
+  }
 
   await emit(db, scope, `ev_${id}_ver`, "rwa.schedule_version", "rwa_schedule", id, {
     "rwa.schedule_version": version, "rwa.risk_weight_map": body.risk_weight_map,
@@ -326,18 +337,37 @@ export async function postIncidentComms(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
+  // Every refusal comes before every write: comms against an incident nobody
+  // declared, or a media response nobody approved, leave no trace.
+  const { data: incident, error: incErr } = await db.schema(scope).from("incident")
+    .select("id, comms_initial_issued_at").eq("id", incidentId).maybeSingle();
+  if (incErr) return internalErrorResponse(requestId, incErr.message);
+  if (!incident) return notFoundResponse(requestId, "incident", incidentId);
+
   const { data: tree } = await db.schema(scope).from("comms_tree")
     .select("id, primary_channel, backup_channel, comms_contact_tree, comms_stakeholder_matrix")
     .eq("id", "commstree").maybeSingle();
   if (!tree) return notFoundResponse(requestId, "comms_tree", "commstree");
 
+  if (body.media_inquiry === true && !isNonEmptyString(body.ceo_approval)) {
+    return apiError(409, "media_response_unapproved", requestId, {
+      title: "media response requires CEO approval",
+      detail: "an unapproved media response is the institution speaking without deciding to",
+    });
+  }
+
   const failed = body.platform_failed === true;
   const channel = failed ? tree.backup_channel : tree.primary_channel;
   const now = new Date();
-  await db.schema(scope).from("incident").update({
-    comms_initial_issued_at: now.toISOString(),
-    comms_initial_due_at: new Date(now.getTime() + COMMS_INITIAL_MINUTES * 60_000).toISOString(),
-  }).eq("id", incidentId);
+  // BC-05 measures the FIRST communication. Later messages are not the
+  // initial issuance, so they never rewrite it.
+  if (!(incident as Record<string, unknown>).comms_initial_issued_at) {
+    const { error: updErr } = await db.schema(scope).from("incident").update({
+      comms_initial_issued_at: now.toISOString(),
+      comms_initial_due_at: new Date(now.getTime() + COMMS_INITIAL_MINUTES * 60_000).toISOString(),
+    }).eq("id", incidentId).is("comms_initial_issued_at", null);
+    if (updErr) return internalErrorResponse(requestId, updErr.message);
+  }
 
   const payload = {
     "comms.contact_tree": tree.comms_contact_tree,
@@ -358,12 +388,6 @@ export async function postIncidentComms(
       "incident", incidentId, { ...payload, primary: tree.primary_channel }, ctx);
   }
   if (body.media_inquiry === true) {
-    if (!isNonEmptyString(body.ceo_approval)) {
-      return apiError(409, "media_response_unapproved", requestId, {
-        title: "media response requires CEO approval",
-        detail: "an unapproved media response is the institution speaking without deciding to",
-      });
-    }
     await emit(db, scope, `ev_${incidentId}_media`, "comms.media_response.logged",
       "incident", incidentId, payload, ctx);
   }
@@ -390,6 +414,12 @@ export async function postPir(
       message: "a drafted PIR needs a root cause and a timeline",
     }]);
   }
+  // A review of an incident nobody declared reviews nothing.
+  const { data: incident, error: incErr } = await db.schema(scope).from("incident")
+    .select("id").eq("id", incidentId).maybeSingle();
+  if (incErr) return internalErrorResponse(requestId, incErr.message);
+  if (!incident) return notFoundResponse(requestId, "incident", incidentId);
+
   const now = new Date();
   const id = `pir_${incidentId}`;
   const { error } = await db.schema(scope).from("pir").upsert({

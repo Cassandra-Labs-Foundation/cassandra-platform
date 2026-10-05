@@ -16,7 +16,7 @@ import { type EvidenceScope, provenanceFor, raiseAlert } from "./bsa.ts";
 import { trainingCoveragePct } from "./hr.ts";
 import {
   apiError, internalErrorResponse, isNonEmptyString, jsonResponse, notFoundResponse,
-  parseJsonBody, validationError, type ValidationErrorItem,
+  parseJsonBody, selectAll, validationError, type ValidationErrorItem,
 } from "./lib.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -585,6 +585,8 @@ const CUSTODY_ATTESTATION_DAYS = 90;
  * rotates, when coverage was last attested. Granting custody to a separated
  * employee is refused — that is not a validation nicety, it is the control.
  */
+const CUSTODY_KINDS = ["key", "combination", "keybox"];
+
 export async function postCashCustody(
   req: Request, db: SupabaseClient, requestId: string,
   ctx: PartnerContext, scope: EvidenceScope = "core",
@@ -596,6 +598,12 @@ export async function postCashCustody(
     return validationError(requestId, [{
       type: "missing_field", field: "employee_id",
       message: "employee_id and kind (key|combination|keybox) are required",
+    }]);
+  }
+  if (!CUSTODY_KINDS.includes(body.kind)) {
+    // the table's check constraint would refuse it anyway — as a 500
+    return validationError(requestId, [{
+      type: "invalid_value", field: "kind", message: `must be one of ${CUSTODY_KINDS.join(", ")}`,
     }]);
   }
   const { data: emp } = await db.schema(scope).from("employee")
@@ -696,6 +704,16 @@ export async function postCashKeyboxOpen(
     return apiError(422, "dual_control_required", requestId, {
       title: "Dual Control Required",
       detail: "the second person must be a DIFFERENT person — one keyholder twice is one keyholder",
+    });
+  }
+  // The second person must be someone who can actually stand there: a current
+  // employee. An unknown id used to reach the employee FK and come back a 500.
+  const { data: second } = await db.schema(scope).from("employee")
+    .select("id, status").eq("id", body.second_person_id).maybeSingle();
+  if (!second || second.status !== "active") {
+    return apiError(422, "dual_control_required", requestId, {
+      title: "Dual Control Required",
+      detail: "the second person must be a current employee",
     });
   }
   const id = `keybox_${crypto.randomUUID()}`;
@@ -1327,14 +1345,12 @@ export async function postCashKriPublish(
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
   const period = isNonEmptyString(body.period) ? body.period : "unknown";
 
-  const { data: os } = await db.schema(scope).from("cash_overshort")
-    .select("id, amount_cents, resolved_at");
-  const { data: recs } = await db.schema(scope).from("cash_reconciliation")
-    .select("id, balanced, variance_cents");
-  const { data: excs } = await db.schema(scope).from("cash_exception")
-    .select("id, kind, rationale, risk_acceptance");
-  const { data: susp } = await db.schema(scope).from("gl_cash_suspense")
-    .select("id, cleared_at");
+  // Whole registers, paged: an unpaged select stops at 1000 rows without
+  // saying so, and the KRI then under-reports (caught by the flow suite).
+  const os = await selectAll<Any>(db, scope, "cash_overshort", "id, amount_cents, resolved_at");
+  const recs = await selectAll<Any>(db, scope, "cash_reconciliation", "id, balanced, variance_cents");
+  const excs = await selectAll<Any>(db, scope, "cash_exception", "id, kind, rationale, risk_acceptance");
+  const susp = await selectAll<Any>(db, scope, "gl_cash_suspense", "id, cleared_at");
 
   const overshortTotal = (os ?? [])
     .reduce((n: number, r: Any) => n + Math.abs(Number(r.amount_cents)), 0);
@@ -1418,11 +1434,13 @@ export async function postCashBoardSummary(
   const { data: pos } = await db.schema(scope).from("cash_enterprise_position")
     .select("id, as_of_date, utilization_bp, verdict")
     .order("as_of_date", { ascending: false }).limit(1);
-  const { data: assets } = await db.schema(scope).from("cash_asset")
-    .select("id, balance_cents");
-  const { data: excs } = await db.schema(scope).from("cash_exception").select("id, kind");
+  const assets = await selectAll<Any>(db, scope, "cash_asset", "id, balance_cents");
+  const excs = await selectAll<Any>(db, scope, "cash_exception", "id, kind");
+  // The MOST RECENTLY published KRI. Unordered, [0] was whichever row
+  // Postgres returned first — an arbitrary period in front of the Board.
   const { data: kri } = await db.schema(scope).from("cash_kri")
-    .select("id, period, overshort_monthly_summary_cents, trend");
+    .select("id, period, overshort_monthly_summary_cents, trend")
+    .order("published_at", { ascending: false, nullsFirst: false }).limit(1);
 
   const id = `cashboard_${quarter}`;
   await emit(db, scope, `ev_${id}`, "board.cash_summary.delivered", "cash_kri", id, {
@@ -1467,9 +1485,9 @@ export async function postCashRecordsPackage(
 
   // The item count is COUNTED, not asserted — a package claiming 400 documents
   // and containing 3 is worse than no package.
-  const { data: recons } = await db.schema(scope).from("cash_reconciliation").select("id");
-  const { data: counts } = await db.schema(scope).from("cash_surprise_count").select("id");
-  const { data: oss } = await db.schema(scope).from("cash_overshort").select("id");
+  const recons = await selectAll<Any>(db, scope, "cash_reconciliation", "id");
+  const counts = await selectAll<Any>(db, scope, "cash_surprise_count", "id");
+  const oss = await selectAll<Any>(db, scope, "cash_overshort", "id");
   const itemIds = [
     ...(recons ?? []).map((r: Any) => String(r.id)),
     ...(counts ?? []).map((r: Any) => String(r.id)),

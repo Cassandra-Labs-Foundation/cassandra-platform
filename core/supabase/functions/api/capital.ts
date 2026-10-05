@@ -59,11 +59,21 @@ const COLS =
 // exactly the select-list defect the live tier exists to catch (PostgREST
 // rejects the unknown columns and the write's emits never run).
 const TARGET_COLS =
-  "id, effective_date, target_bp, proposed_by, approved_by, approved_at, provenance, created_at";
+  "id, effective_date, target_bp, proposed_by, approved_by, approved_at, " +
+  "proposed_by_token, approved_by_token, provenance, created_at";
 
-/** The ratio, in basis points, floored — never rounded up into a better band. */
+/**
+ * The ratio, in basis points, computed EXACTLY as ck_capital_ratio_matches_components
+ * does: Postgres bigint division, which truncates toward zero. For a solvent
+ * position that is the floor, so it never rounds up into a better band. For a
+ * negative net worth truncation lands nearer zero (-2.47bp → -2, not -3), but
+ * every negative ratio is critically undercapitalized either way, and a ratio
+ * that disagreed with the constraint would make every non-dividing insolvent
+ * quarter unrecordable (a 500). BigInt so the cents*10000 product cannot lose
+ * precision above 2^53 the way a float would.
+ */
 export function netWorthRatioBp(netWorthCents: number, totalAssetsCents: number): number {
-  return Math.floor((netWorthCents * 10000) / totalAssetsCents);
+  return Number((BigInt(Math.trunc(netWorthCents)) * 10000n) / BigInt(Math.trunc(totalAssetsCents)));
 }
 
 export function classifyPca(ratioBp: number): string {
@@ -149,12 +159,21 @@ export async function postCapitalPosition(
   const internalBp = typeof body.internal_trigger_bp === "number" ? body.internal_trigger_bp : null;
   const internalBreached = internalBp === null ? null : ratioBp < internalBp;
 
-  const now = new Date();
-  const nwrpDue = restricted
-    ? new Date(now.getTime() + NWRP_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    : null;
-
   const id = `cap_${asOf.replace(/-/g, "")}`;
+
+  // The 45-day clock is anchored on the FIRST classification into a band that
+  // requires a restoration plan. Re-posting the quarter (a restatement) that is
+  // still restricted keeps the deadline it already has; resetting it on every
+  // upsert would let a restatement silently push the plan out by 45 days.
+  const { data: existing, error: exErr } = await db.schema(scope).from("capital_position")
+    .select("id, nwrp_due_at").eq("id", id).maybeSingle();
+  if (exErr) return internalErrorResponse(requestId, exErr.message);
+  const priorDue = (existing as Record<string, unknown> | null)?.nwrp_due_at as string | null ?? null;
+  const now = new Date();
+  const nwrpDue = !restricted
+    ? null
+    : priorDue ?? new Date(now.getTime() + NWRP_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await db.schema(scope).from("capital_position").upsert({
     id,
     as_of_date: asOf,
@@ -499,6 +518,12 @@ export async function postCapitalSweep(
  * law and hardcoded above; these are a CHOICE, and a choice has to be recorded
  * as one — proposed by someone, approved by someone else, effective on a date.
  * Write-restricted to the CCO per CP-03.
+ *
+ * Four eyes is enforced on the CREDENTIALS, not on the names in the body. The
+ * names (`proposed_by`, `approved_by`) are what the record says; the tokens
+ * (`proposed_by_token`, `approved_by_token`) are who actually did it. Approval
+ * is a SECOND call by a DIFFERENT token: the approver is always the caller, so
+ * one token cannot file a target together with an approver it invented.
  */
 export async function postCapitalTarget(
   req: Request, db: SupabaseClient, requestId: string,
@@ -544,6 +569,23 @@ export async function postCapitalTarget(
   }
 
   const id = `captgt_${effective.replace(/-/g, "")}`;
+  const { data: existing, error: exErr } = await db.schema(scope).from("capital_target")
+    .select(TARGET_COLS).eq("id", id).maybeSingle();
+  if (exErr) return internalErrorResponse(requestId, exErr.message);
+  const prior = existing as unknown as Record<string, unknown> | null;
+  // The call approves the proposal ON FILE only if it leaves it unchanged. A
+  // call that changes the target or the proposer is a new proposal, and its
+  // caller is the proposer — so it cannot approve it in the same breath.
+  const sameProposal = prior !== null && prior.target_bp === targetBp &&
+    prior.proposed_by === proposedBy && typeof prior.proposed_by_token === "string";
+  const proposerToken = sameProposal ? prior!.proposed_by_token as string : ctx.tokenId;
+  if (approvedBy !== null && (!ctx.tokenId || proposerToken === ctx.tokenId)) {
+    return apiError(409, "four_eyes_required", requestId, {
+      detail: "a capital target is approved by a different credential than the one that " +
+        "proposed it: propose it first, then approve it with another token",
+    });
+  }
+
   const { data, error } = await db.schema(scope).from("capital_target").upsert({
     id,
     effective_date: effective,
@@ -551,6 +593,8 @@ export async function postCapitalTarget(
     proposed_by: proposedBy,
     approved_by: approvedBy,
     approved_at: approvedBy ? new Date().toISOString() : null,
+    proposed_by_token: proposerToken,
+    approved_by_token: approvedBy ? ctx.tokenId : null,
     provenance: provenanceFor(scope, ctx),
   }, { onConflict: "id" }).select(TARGET_COLS).maybeSingle();
   if (error) return internalErrorResponse(requestId, error.message);
@@ -558,6 +602,7 @@ export async function postCapitalTarget(
   if (approvedBy) {
     await emit(db, scope, `ev_${id}_appr`, "capital.targets.approved", id, {
       target_bp: targetBp, approved_by: approvedBy,
+      proposed_by_token: proposerToken, approved_by_token: ctx.tokenId,
     }, ctx);
   }
 
@@ -577,6 +622,9 @@ export async function postCapitalTarget(
   }
   return jsonResponse({ data }, 201, requestId);
 }
+
+/** CP-05 (capital plan) and CP-06 (stress report) are CFO-only documents. */
+const CFO_DOCUMENTS = new Set(["capital_plan", "stress_report"]);
 
 /**
  * POST /capital/documents {kind, cycle, prepared_by, presented_to?, reviewed_by?}
@@ -600,6 +648,17 @@ export async function postCapitalDocument(
     return validationError(requestId, [
       { field: "kind", type: "invalid", message: "kind, cycle and prepared_by are required" },
     ]);
+  }
+  // CP-05: "The capital plan is write-restricted to the CFO"; CP-06: "The
+  // stress report is write-restricted to the CFO". Refused before any write.
+  // (The ICAAP report is BA-07's and is not CFO-restricted.)
+  if (CFO_DOCUMENTS.has(kind) && !ctx.roles.includes("cfo")) {
+    return apiError(403, "insufficient_role", requestId, {
+      title: "Insufficient Role",
+      detail: `cfo is required to file a ${kind} (CP-05/CP-06); this token carries ${
+        ctx.roles.length ? ctx.roles.join(", ") : "no such role"
+      }`,
+    });
   }
 
   const presentedTo = typeof body.presented_to === "string" ? body.presented_to : null;

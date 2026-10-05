@@ -437,3 +437,31 @@ export async function storeIdempotencyResponse(
     .eq("idempotency_key", idempotencyKey);
   if (error) throw new Error(`idempotency update: ${error.message}`);
 }
+
+/**
+ * Every row of a register, not the first page of it.
+ *
+ * PostgREST caps an unbounded select at its max-rows (1000 here) and says
+ * nothing — the response is a normal 200 with 1000 rows. A handler that counts
+ * or sums a register that way under-reports silently once the register passes
+ * the cap (caught live by the partner-flow suite: the cash KRI and the
+ * examiner records package both stopped at 1000). Pages by `id` so the walk is
+ * stable while rows are being added.
+ */
+export async function selectAll<T = Record<string, unknown>>(
+  db: SupabaseClient,
+  schema: string,
+  table: string,
+  columns: string,
+  pageSize = 1000,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db.schema(schema).from(table).select(columns)
+      .order("id", { ascending: true }).range(from, from + pageSize - 1);
+    if (error) throw new Error(`${table} read: ${error.message}`);
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}

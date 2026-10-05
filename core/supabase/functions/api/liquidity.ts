@@ -69,6 +69,20 @@ async function emit(
   if (error) throw new Error(`liquidity event (${code}): ${error.message}`);
 }
 
+/**
+ * One past the highest version ever issued in a versioned register —
+ * superseded rows included, so a new version can never collide with (and
+ * overwrite) one already on file.
+ */
+async function nextVersion(
+  db: SupabaseClient, scope: EvidenceScope, table: "lar_band_config" | "stress_assumption_set",
+): Promise<number> {
+  const { data, error } = await db.schema(scope).from(table)
+    .select("version").order("version", { ascending: false }).limit(1);
+  if (error) throw new Error(`${table} version read: ${error.message}`);
+  return Number((data ?? [])[0]?.version ?? 0) + 1;
+}
+
 // --------------------------------------------------------------- LQ-03 bands
 
 /** POST /liquidity/lar-bands {critical_bp, warning_bp, target_bp, approved_by} */
@@ -90,20 +104,31 @@ export async function postLarBandConfig(
     }]);
   }
   const now = new Date();
+  // Versioned, never overwritten: positions cite band_config_id, so the config
+  // they were banded under must survive a re-approval. The next version is
+  // one past the highest EVER issued (superseded rows included) — counting
+  // only the unsuperseded rows always yields v2 once a config exists, and an
+  // upsert on that id silently replaced the config in force.
+  let version: number;
+  try {
+    version = await nextVersion(db, scope, "lar_band_config");
+  } catch (e) {
+    return internalErrorResponse(requestId, String(e));
+  }
   const { data: prior } = await db.schema(scope).from("lar_band_config")
-    .select("id, version").is("superseded_at", null);
-  const version = (prior ?? []).length + 1;
+    .select("id").is("superseded_at", null);
+  const id = `larcfg_v${version}`;
+  const { error } = await db.schema(scope).from("lar_band_config").insert({
+    id, version, critical_bp: crit, warning_bp: warn, target_bp: tgt,
+    approved_by: body.approved_by, effective_at: now.toISOString(),
+    superseded_at: null, provenance: provenanceFor(scope, ctx),
+  });
+  if (error) return internalErrorResponse(requestId, error.message);
+  // supersede only once the new version is safely on file
   for (const p of prior ?? []) {
     await db.schema(scope).from("lar_band_config")
       .update({ superseded_at: now.toISOString() }).eq("id", p.id);
   }
-  const id = `larcfg_v${version}`;
-  const { error } = await db.schema(scope).from("lar_band_config").upsert({
-    id, version, critical_bp: crit, warning_bp: warn, target_bp: tgt,
-    approved_by: body.approved_by, effective_at: now.toISOString(),
-    superseded_at: null, provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" });
-  if (error) return internalErrorResponse(requestId, error.message);
   return jsonResponse({ data: { id, version } }, 201, requestId);
 }
 
@@ -135,11 +160,12 @@ export async function postLiquidityPosition(
   const cfg = (cfgs ?? [])[0] ?? null;
   const band = larBand(larBp, cfg as Any);
 
+  // the immediately preceding day's position, read directly (an unbounded
+  // read of the whole register is capped at 1000 rows by PostgREST)
   const { data: priors } = await db.schema(scope).from("liquidity_position")
-    .select("id, as_of_date, lar_current_band");
-  const prior = (priors ?? [])
-    .filter((p: Any) => String(p.as_of_date) < String(body.as_of_date))
-    .sort((a: Any, b: Any) => String(b.as_of_date).localeCompare(String(a.as_of_date)))[0];
+    .select("id, as_of_date, lar_current_band").lt("as_of_date", String(body.as_of_date))
+    .order("as_of_date", { ascending: false }).limit(1);
+  const prior = (priors ?? [])[0];
 
   const now = new Date();
   const id = `liqpos_${body.as_of_date}`;
@@ -287,8 +313,9 @@ export async function postStressAssumptions(
 
   const { data: prior } = await db.schema(scope).from("stress_assumption_set")
     .select("id, version").is("superseded_at", null);
-  const version = (prior ?? []).length + 1;
-  if (version > 1 && !(isNonEmptyString(body.rationale) && isNonEmptyString(body.approver_id))) {
+  // A change (there is a set in force) must be owned. The version number itself
+  // is one past the highest ever issued — see nextVersion.
+  if ((prior ?? []).length > 0 && !(isNonEmptyString(body.rationale) && isNonEmptyString(body.approver_id))) {
     // A survival horizon recomputed under quietly-changed assumptions is the
     // failure LQ-05 describes: the number improves and nothing records why.
     return validationError(requestId, [{
@@ -296,13 +323,17 @@ export async function postStressAssumptions(
       message: "changing a stress assumption needs a rationale and an approver",
     }]);
   }
-  const now = new Date();
-  for (const p of prior ?? []) {
-    await db.schema(scope).from("stress_assumption_set")
-      .update({ superseded_at: now.toISOString() }).eq("id", p.id);
+  let version: number;
+  try {
+    version = await nextVersion(db, scope, "stress_assumption_set");
+  } catch (e) {
+    return internalErrorResponse(requestId, String(e));
   }
+  const now = new Date();
   const id = `stressassm_v${version}`;
-  const { error } = await db.schema(scope).from("stress_assumption_set").upsert({
+  // insert, never upsert: the prior set must stay intact so a run computed
+  // under it stays reproducible (LQ-05)
+  const { error } = await db.schema(scope).from("stress_assumption_set").insert({
     id, version, stress_set: isNonEmptyString(body.set) ? body.set : "baseline",
     stress_behavioral_assumptions: (body.behavioral_assumptions ?? {}) as Any,
     stress_baas_shock_params: (body.baas_shock_params ?? {}) as Any,
@@ -311,12 +342,19 @@ export async function postStressAssumptions(
     stress_change_rationale: isNonEmptyString(body.rationale) ? body.rationale : null,
     stress_approver_id: isNonEmptyString(body.approver_id) ? body.approver_id : null,
     superseded_at: null, provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" });
+  });
   if (error) return internalErrorResponse(requestId, error.message);
+  for (const p of prior ?? []) {
+    await db.schema(scope).from("stress_assumption_set")
+      .update({ superseded_at: now.toISOString() }).eq("id", p.id);
+  }
 
   // Versioned, not edited: the prior set stays readable so a number computed
   // last quarter can still be reproduced.
-  await emit(db, scope, `ev_${id}_ver`, "stress.assumption_versioned",
+  // One event per change. The suffix keeps the id unique even if a version
+  // number is ever reissued (a deleted version row), which would otherwise
+  // suppress this change's evidence as a duplicate of an earlier one.
+  await emit(db, scope, `ev_${id}_ver_${now.getTime()}`, "stress.assumption_versioned",
     "stress_assumption_set", id, {
       "stress.set": body.set ?? "baseline", version,
       "stress.behavioral_assumptions": body.behavioral_assumptions ?? {},
@@ -442,7 +480,10 @@ export async function postFacility(
 
   if (tested) {
     // A facility that has never been drawn is a facility nobody knows works.
-    await emit(db, scope, `ev_${id}_test`, "facility.test.completed",
+    // A facility is retested every year: each test is its own evidence, so the
+    // event id carries the test time (a fixed id was suppressed as a duplicate
+    // on every test after the first).
+    await emit(db, scope, `ev_${id}_test_${now.getTime()}`, "facility.test.completed",
       "liquidity_facility", id, {
         "facility.contacts": body.contacts ?? {},
         "facility.test_script": body.test_script,
@@ -535,16 +576,24 @@ export async function postLiquidityPack(
       type: "invalid_value", field: "cadence", message: `one of ${cadences.join("/")}`,
     }]);
   }
+  // Every figure is anchored on the latest position, read with an explicit
+  // order — never "row [0]" of an unordered (and 1000-row-capped) register.
   const { data: pos } = await db.schema(scope).from("liquidity_position")
-    .select("id, lar_value_bp, lar_current_band, as_of_date");
-  const latest = (pos ?? []).sort((a: Any, b: Any) =>
-    String(b.as_of_date).localeCompare(String(a.as_of_date)))[0];
-  const { data: mism } = await db.schema(scope).from("maturity_mismatch")
-    .select("id, mismatch_current_gaps");
-  const { data: coll } = await db.schema(scope).from("collateral_position")
-    .select("id, headroom_cents");
+    .select("id, lar_value_bp, lar_current_band, as_of_date")
+    .order("as_of_date", { ascending: false }).limit(1);
+  const latest = (pos ?? [])[0] as Any;
+  // the maturity gaps are the latest position's own mismatch
+  const { data: mism } = latest
+    ? await db.schema(scope).from("maturity_mismatch")
+      .select("id, mismatch_current_gaps").eq("position_id", latest.id).limit(1)
+    : { data: [] as Any[] };
+  // the most recent headroom on or before the position's as-of date
+  let collQ = db.schema(scope).from("collateral_position").select("id, headroom_cents, as_of_date");
+  if (latest) collQ = collQ.lte("as_of_date", latest.as_of_date);
+  const { data: coll } = await collQ.order("as_of_date", { ascending: false }).limit(1);
+  // the most recent stress run (runs carry a period label, not a date)
   const { data: runs } = await db.schema(scope).from("liquidity_stress_run")
-    .select("id, survival_days_combined");
+    .select("id, survival_days_combined").order("created_at", { ascending: false }).limit(1);
 
   // The pack is ASSEMBLED from the positions, not re-entered. A board deck
   // whose numbers were typed in separately is a second source of truth, and the

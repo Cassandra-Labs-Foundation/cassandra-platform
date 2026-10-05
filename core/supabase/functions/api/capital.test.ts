@@ -10,7 +10,7 @@ import { makeDrillDb } from "../drill/fake_db.ts";
 import { OPS_CTX, req } from "./test_helpers.ts";
 import { type PartnerContext } from "./auth.ts";
 import {
-  classifyPca, netWorthRatioBp, postCapitalPosition, postCapitalSweep,
+  classifyPca, netWorthRatioBp, postCapitalDocument, postCapitalPosition, postCapitalSweep,
   postCapitalTarget, postNwrp, postRwaRun, TRADING_BOOK_THRESHOLD_CENTS,
 } from "./capital.ts";
 
@@ -19,6 +19,8 @@ type Any = any;
 const CTX = OPS_CTX;
 /** CP-03: targets are write-restricted to the CCO. */
 const CCO_CTX: PartnerContext = { ...OPS_CTX, tokenId: "tok_cco", roles: ["cco"] };
+/** a second CCO-capable credential: four eyes is two tokens, not two names */
+const APPROVER_CTX: PartnerContext = { ...OPS_CTX, tokenId: "tok_cco_2", roles: ["cco"] };
 const codes = (rows: Record<string, Any[]>) =>
   (rows["core.event"] ?? []).map((e) => String(e.code));
 
@@ -154,12 +156,71 @@ Deno.test("CP-03: targets are CCO-restricted and cannot be self-approved", async
   );
   assertEquals(selfApproved.status, 409);
 
-  const ok = await postCapitalTarget(
+  // one token filing the target together with an approver it names is still
+  // one credential: four eyes binds to the CALLER, not to the body's names
+  const oneToken = await postCapitalTarget(
     req({ effective_date: "2026-07-01", target_bp: 900, proposed_by: "cco_1", approved_by: "board_1" }),
     dbx.client, "t", CCO_CTX,
   );
+  assertEquals(oneToken.status, 409);
+  assert(!codes(dbx.rows).includes("capital.targets.approved"));
+
+  const proposed = await postCapitalTarget(
+    req({ effective_date: "2026-07-01", target_bp: 900, proposed_by: "cco_1" }),
+    dbx.client, "t", CCO_CTX,
+  );
+  assertEquals(proposed.status, 201);
+  // the proposer's own token cannot then approve it
+  const selfToken = await postCapitalTarget(
+    req({ effective_date: "2026-07-01", target_bp: 900, proposed_by: "cco_1", approved_by: "board_1" }),
+    dbx.client, "t", CCO_CTX,
+  );
+  assertEquals(selfToken.status, 409);
+  const ok = await postCapitalTarget(
+    req({ effective_date: "2026-07-01", target_bp: 900, proposed_by: "cco_1", approved_by: "board_1" }),
+    dbx.client, "t", APPROVER_CTX,
+  );
   assertEquals(ok.status, 201);
+  const row = dbx.rows["core.capital_target"][0];
+  assertEquals(row.proposed_by_token, "tok_cco");
+  assertEquals(row.approved_by_token, "tok_cco_2");
   assert(codes(dbx.rows).includes("capital.targets.approved"));
+});
+
+Deno.test("an insolvent position records the ratio the DB constraint computes (truncated toward zero)", async () => {
+  // -2.47bp: Postgres bigint division gives -2; flooring to -3 was a 500
+  assertEquals(netWorthRatioBp(-2_469_135, 10_000_000_000), -2);
+  const dbx = makeDrillDb();
+  const res = await postCapitalPosition(
+    position({ net_worth_cents: -2_469_135, total_assets_cents: 10_000_000_000 }), dbx.client, "t", CTX,
+  );
+  assertEquals(res.status, 201);
+  assertEquals(dbx.rows["core.capital_position"][0].pca_category, "critically_undercapitalized");
+  assertEquals(dbx.violations, []);
+});
+
+Deno.test("a restatement of a still-undercapitalized quarter keeps the first NWRP deadline", async () => {
+  const dbx = makeDrillDb();
+  await postCapitalPosition(position({ net_worth_cents: 250_000_000 }), dbx.client, "t", CTX);
+  const first = dbx.rows["core.capital_position"][0].nwrp_due_at;
+  assert(first);
+  await new Promise((r) => setTimeout(r, 5));
+  await postCapitalPosition(position({ net_worth_cents: 260_000_000 }), dbx.client, "t", CTX);
+  assertEquals(dbx.rows["core.capital_position"][0].nwrp_due_at, first);
+});
+
+Deno.test("CP-05: only a cfo token files the capital plan", async () => {
+  const dbx = makeDrillDb();
+  const denied = await postCapitalDocument(
+    req({ kind: "capital_plan", cycle: "2026Q2", prepared_by: "x" }), dbx.client, "t", CTX,
+  );
+  assertEquals(denied.status, 403);
+  assertEquals((dbx.rows["core.capital_document"] ?? []).length, 0);
+  const ok = await postCapitalDocument(
+    req({ kind: "capital_plan", cycle: "2026Q2", prepared_by: "x" }), dbx.client, "t",
+    { ...OPS_CTX, tokenId: "tok_cfo", roles: ["cfo"] },
+  );
+  assertEquals(ok.status, 201);
 });
 
 // ------------------------------------------------------------------ BA-04

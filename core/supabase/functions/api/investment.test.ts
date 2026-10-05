@@ -36,13 +36,52 @@ import {
 // deno-lint-ignore no-explicit-any
 type Any = any;
 const CTX = OPS_CTX;
+// IP-14 binds each duty to the AUTHENTICATED caller, so each role acts under
+// its own credential — the token id is the role-register key.
+const TRADER = { ...OPS_CTX, tokenId: "trader_1", idempotencyScope: "token:trader_1" };
+const CONFIRMER = { ...OPS_CTX, tokenId: "ops_confirm", idempotencyScope: "token:ops_confirm" };
 const codes = (rows: Record<string, Any[]>) =>
   (rows["core.event"] ?? []).map((e) => String(e.code));
 
-/** A book that can trade: list, counterparty, capital, limit, securities. */
+/**
+ * The drill fake has no `.range()`; the handlers page whole-register reads
+ * with it (PostgREST caps an unpaged select at 1000 rows). Test data is far
+ * below one page, so range(0, n) is limit(n + 1) and any later page is empty.
+ */
+// deno-lint-ignore no-explicit-any
+function withRange(client: any): any {
+  // deno-lint-ignore no-explicit-any
+  const wrap = (chain: any): any =>
+    new Proxy({}, {
+      get(_t, prop) {
+        if (prop === "range") {
+          return (from: number, to: number) =>
+            from === 0
+              ? wrap(chain.limit(to - from + 1))
+              : { then: (f: (v: Any) => Any) => Promise.resolve({ data: [], error: null }).then(f) };
+        }
+        const v = chain[prop];
+        if (typeof v !== "function") return v;
+        return (...args: Any[]) => {
+          const out = v(...args);
+          return out === chain || (out && typeof out === "object" && "eq" in out && "then" in out)
+            ? wrap(out)
+            : out;
+        };
+      },
+    });
+  return {
+    schema(s: string) {
+      const sc = client.schema(s);
+      return { from: (t: string) => wrap(sc.from(t)), rpc: sc.rpc };
+    },
+  };
+}
+
+/** A book that can trade: list, counterparty, capital, limit, securities, roles. */
 async function seedBook(opts: { limitBp?: number; warnBp?: number } = {}) {
   const dbx = makeDrillDb();
-  const db = dbx.client;
+  const db = withRange(dbx.client);
   dbx.rows["core.capital_position"] = [{
     id: "cap_1", as_of_date: "2026-03-31", net_worth_cents: 750_000_000,
     total_assets_cents: 5_000_000_000, net_worth_ratio_bp: 1500,
@@ -78,7 +117,11 @@ async function seedBook(opts: { limitBp?: number; warnBp?: number } = {}) {
   dbx.rows["core.security"] = [
     { id: "sec_1", issuer_ref: "us_gov", instrument_class: "us_treasury", provenance: "production" },
     { id: "sec_2", issuer_ref: "acme", instrument_class: "cmo", provenance: "production" },
+    { id: "sec_x", issuer_ref: "us_gov", instrument_class: "crypto", provenance: "production" },
   ];
+  for (const [u, role] of [["trader_1", "execution"], ["ops_confirm", "confirmation"]]) {
+    await putUserRole(req({ role }), u, db, "t", CTX);
+  }
   return { dbx, db };
 }
 
@@ -94,7 +137,7 @@ const buy = (o: Record<string, unknown> = {}) => req({
 Deno.test("IP-03: an instrument class NOT on the list is refused — absence means no", async () => {
   const { dbx, db } = await seedBook();
   const res = await postTrade(
-    buy({ security_id: "sec_x", instrument_class: "crypto", issuer_ref: "us_gov" }), db, "t", CTX,
+    buy({ security_id: "sec_x", instrument_class: "crypto", issuer_ref: "us_gov" }), db, "t", TRADER,
   );
   assertEquals(res.status, 409);
   assertEquals(dbx.rows["core.trade"][0].permissibility_verdict, "unassessed");
@@ -105,7 +148,7 @@ Deno.test("IP-03: an instrument class NOT on the list is refused — absence mea
 Deno.test("IP-03: an explicitly prohibited class is refused", async () => {
   const { dbx, db } = await seedBook();
   const res = await postTrade(
-    buy({ security_id: "sec_2", instrument_class: "cmo", issuer_ref: "acme" }), db, "t", CTX,
+    buy({ security_id: "sec_2", instrument_class: "cmo", issuer_ref: "acme" }), db, "t", TRADER,
   );
   assertEquals(res.status, 409);
   assertEquals(dbx.rows["core.trade"][0].permissibility_verdict, "prohibited");
@@ -113,7 +156,7 @@ Deno.test("IP-03: an explicitly prohibited class is refused", async () => {
 
 Deno.test("IP-03: maturity beyond the list limit is prohibited", async () => {
   const { dbx, db } = await seedBook();
-  const res = await postTrade(buy({ maturity_months: 240 }), db, "t", CTX);
+  const res = await postTrade(buy({ maturity_months: 240 }), db, "t", TRADER);
   assertEquals(res.status, 409);
   assert(
     (dbx.rows["core.trade"][0].blocked_reasons as string[]).includes("maturity_exceeds_list_limit"),
@@ -145,20 +188,20 @@ Deno.test("IP-08: an unregulated counterparty is not approved and blocks the tra
   );
   const im = dbx.rows["core.intermediary"].find((i) => i.id === "interm_backstreet");
   assertEquals(im!.approved, false);
-  const res = await postTrade(buy({ intermediary_id: "interm_backstreet" }), db, "t", CTX);
+  const res = await postTrade(buy({ intermediary_id: "interm_backstreet" }), db, "t", TRADER);
   assertEquals(res.status, 409);
   assert(codes(dbx.rows).includes("trade.intermediary.blocked"));
 });
 
 Deno.test("IP-08: a trade with NO counterparty is refused", async () => {
   const { db } = await seedBook();
-  const res = await postTrade(buy({ intermediary_id: undefined }), db, "t", CTX);
+  const res = await postTrade(buy({ intermediary_id: undefined }), db, "t", TRADER);
   assertEquals(res.status, 409);
 });
 
 Deno.test("IP-08: safekeeping reconciliation compares OUR book to the custodian's", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   await postSafekeepingReconciliation(
     req({ intermediary_id: "interm_northgate", holdings: { sec_1: 29_000_000 } }), db, "t", CTX,
   );
@@ -168,7 +211,7 @@ Deno.test("IP-08: safekeeping reconciliation compares OUR book to the custodian'
   assertEquals((ev!.payload as Any).breaks, 1);
 
   const s2 = await seedBook();
-  await postTrade(buy(), s2.db, "t", CTX);
+  await postTrade(buy(), s2.db, "t", TRADER);
   await postSafekeepingReconciliation(
     req({ intermediary_id: "interm_northgate", holdings: { sec_1: 30_000_000 } }), s2.db, "t", CTX,
   );
@@ -182,7 +225,7 @@ Deno.test("IP-08: safekeeping reconciliation compares OUR book to the custodian'
 
 Deno.test("IP-07: concentration is tested on the PROJECTED position", async () => {
   const { db } = await seedBook();
-  await postTrade(buy({ par_cents: 300_000_000 }), db, "t", CTX);
+  await postTrade(buy({ par_cents: 300_000_000 }), db, "t", TRADER);
   // 300m held; another 100m would be 5333bp against a 5000bp limit
   const v = await evaluateTradeGate(db, "core", {
     security_id: "sec_1", instrument_class: "us_treasury", issuer_ref: "us_gov",
@@ -195,7 +238,7 @@ Deno.test("IP-07: concentration is tested on the PROJECTED position", async () =
 
 Deno.test("IP-07: the warning fires on a trade that still EXECUTES", async () => {
   const { dbx, db } = await seedBook();
-  const res = await postTrade(buy({ par_cents: 320_000_000 }), db, "t", CTX);
+  const res = await postTrade(buy({ par_cents: 320_000_000 }), db, "t", TRADER);
   assertEquals(res.status, 201, "a warning must not block");
   assertEquals(dbx.rows["core.trade"][0].limit_verdict, "warning");
   assert(codes(dbx.rows).includes("trade.limit_warning.issued"));
@@ -204,7 +247,7 @@ Deno.test("IP-07: the warning fires on a trade that still EXECUTES", async () =>
 
 Deno.test("IP-07: a breach blocks, books nothing, and opens a waiver", async () => {
   const { dbx, db } = await seedBook();
-  const res = await postTrade(buy({ par_cents: 400_000_000 }), db, "t", CTX);
+  const res = await postTrade(buy({ par_cents: 400_000_000 }), db, "t", TRADER);
   assertEquals(res.status, 409);
   assertEquals((dbx.rows["core.position"] ?? []).length, 0, "no position booked");
   assert(codes(dbx.rows).includes("concentration.limit_exceeded"));
@@ -214,7 +257,7 @@ Deno.test("IP-07: a breach blocks, books nothing, and opens a waiver", async () 
 Deno.test("IP-07: NO limit configured is unassessed, not within-limit", async () => {
   const { db } = await seedBook();
   const v = await evaluateTradeGate(db, "core", {
-    security_id: "sec_2", instrument_class: "us_treasury", issuer_ref: "unlimited_issuer",
+    security_id: "sec_2", instrument_class: "cmo", issuer_ref: "acme",
     intermediary_id: "interm_northgate", par_cents: 1, side: "buy", executed_by: "t",
   }, new Date());
   assertEquals(v.limit, "unassessed");
@@ -237,7 +280,7 @@ Deno.test("IP-07: a warning at or above the limit is refused as a limit definiti
 
 Deno.test("IP-11: no pre-purchase checklist blocks the trade", async () => {
   const { dbx, db } = await seedBook();
-  const res = await postTrade(buy({ checklist_completed: false }), db, "t", CTX);
+  const res = await postTrade(buy({ checklist_completed: false }), db, "t", TRADER);
   assertEquals(res.status, 409);
   assert(codes(dbx.rows).includes("trade.checklist_exception_raised"));
 });
@@ -246,11 +289,10 @@ Deno.test("IP-11: no pre-purchase checklist blocks the trade", async () => {
 
 Deno.test("IP-14: the executing trader cannot confirm their own trade", async () => {
   const { dbx, db } = await seedBook();
-  await putUserRole(req({ role: "execution" }), "trader_1", db, "t", CTX);
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   const tid = String(dbx.rows["core.trade"][0].id);
   const res = await postTradeConfirmation(
-    req({ confirmed_by: "trader_1", counterparty_par_cents: 30_000_000 }), tid, db, "t", CTX,
+    req({ confirmed_by: "trader_1", counterparty_par_cents: 30_000_000 }), tid, db, "t", TRADER,
   );
   assertEquals(res.status, 409);
   assertEquals(dbx.rows["core.sod_violation"].length, 1);
@@ -260,22 +302,22 @@ Deno.test("IP-14: the executing trader cannot confirm their own trade", async ()
 
 Deno.test("IP-14: the executing trader cannot settle their own trade either", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   const tid = String(dbx.rows["core.trade"][0].id);
   await postTradeConfirmation(
-    req({ confirmed_by: "ops_confirm", counterparty_par_cents: 30_000_000 }), tid, db, "t", CTX,
+    req({ confirmed_by: "ops_confirm", counterparty_par_cents: 30_000_000 }), tid, db, "t", CONFIRMER,
   );
-  const res = await postTradeReconciliation(req({ settled_by: "trader_1" }), tid, db, "t", CTX);
+  const res = await postTradeReconciliation(req({ settled_by: "trader_1" }), tid, db, "t", TRADER);
   assertEquals(res.status, 409);
   assertEquals(dbx.rows["core.trade"][0].reconciled_at, null);
 });
 
 Deno.test("IP-14: a confirmation that does not match the counterparty is flagged", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   const tid = String(dbx.rows["core.trade"][0].id);
   await postTradeConfirmation(
-    req({ confirmed_by: "ops_confirm", counterparty_par_cents: 29_000_000 }), tid, db, "t", CTX,
+    req({ confirmed_by: "ops_confirm", counterparty_par_cents: 29_000_000 }), tid, db, "t", CONFIRMER,
   );
   assertEquals(dbx.rows["core.trade"][0].confirmation_matched, false);
   assert(codes(dbx.rows).includes("trade.confirmation_discrepancy.flagged"));
@@ -284,10 +326,10 @@ Deno.test("IP-14: a confirmation that does not match the counterparty is flagged
 
 Deno.test("IP-14: a matching confirmation records the match", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   const tid = String(dbx.rows["core.trade"][0].id);
   await postTradeConfirmation(
-    req({ confirmed_by: "ops_confirm", counterparty_par_cents: 30_000_000 }), tid, db, "t", CTX,
+    req({ confirmed_by: "ops_confirm", counterparty_par_cents: 30_000_000 }), tid, db, "t", CONFIRMER,
   );
   assert(codes(dbx.rows).includes("trade.confirmation_matched"));
   assertEquals(dbx.violations, []);
@@ -430,7 +472,7 @@ Deno.test("IP-05: a credit file with no internal analysis is refused", async () 
 
 Deno.test("IP-06: the liquidity report is computed from the book, not supplied", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   await postLiquidityClassification(
     req({ security_id: "sec_1", liquidity_class: "level_1" }), db, "t", CTX,
   );
@@ -499,7 +541,7 @@ Deno.test("IP-13: a return with no benchmark is refused", async () => {
 
 Deno.test("IP-15: executing a trade declares the required document set with its clock", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy(), db, "t", CTX);
+  await postTrade(buy(), db, "t", TRADER);
   const docs = dbx.rows["core.document"];
   assertEquals(docs.length, REQUIRED_TRADE_DOCUMENTS.length);
   assert(docs.every((d) => d.attachment_due_at));
@@ -508,7 +550,7 @@ Deno.test("IP-15: executing a trade declares the required document set with its 
 
 Deno.test("a blocked trade declares NO document set and books no position", async () => {
   const { dbx, db } = await seedBook();
-  await postTrade(buy({ instrument_class: "cmo", security_id: "sec_2", issuer_ref: "acme" }), db, "t", CTX);
+  await postTrade(buy({ instrument_class: "cmo", security_id: "sec_2", issuer_ref: "acme" }), db, "t", TRADER);
   assertEquals((dbx.rows["core.document"] ?? []).length, 0);
   assertEquals((dbx.rows["core.position"] ?? []).length, 0);
 });

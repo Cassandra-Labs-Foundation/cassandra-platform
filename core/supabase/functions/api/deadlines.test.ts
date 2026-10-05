@@ -74,6 +74,8 @@ Deno.test("NCUA: the 72h clock runs from the REPORTABILITY DETERMINATION", async
   const id = String((await res.clone().json()).id);
   // backdate the DECLARATION — the clock must not run from it
   dbx.rows["core.incident"][0].declared_at = "2020-01-01T00:00:00.000Z";
+  // determination requires a completed assessment (ck_incident_assessment_before_determination)
+  dbx.rows["core.incident"][0].assessment_completed_at = new Date().toISOString();
 
   const before = Date.now();
   await postDetermineReportability(
@@ -100,6 +102,7 @@ Deno.test("NCUA: a NON-reportable determination sets no clock at all", async () 
     req({ title: "t", severity: "sev2", source: "siem" }), dbx.client, "d", CTX,
   );
   const id = String((await res.clone().json()).id);
+  dbx.rows["core.incident"][0].assessment_completed_at = new Date().toISOString();
   await postDetermineReportability(
     req({ is_reportable: false, rationale: "no member data involved" }),
     id, dbx.client, "d", COMPLIANCE,

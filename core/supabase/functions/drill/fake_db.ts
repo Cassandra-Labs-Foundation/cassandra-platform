@@ -483,6 +483,7 @@ export function makeDrillDb(): DrillDb {
           let orderAsc = true;
           let orderNullsFirst = false;
           let lim = Infinity;
+          let offset = 0;
 
           const chain: Any = {
             select: () => chain,
@@ -504,6 +505,9 @@ export function makeDrillDb(): DrillDb {
               return chain;
             },
             limit: (n: number) => (lim = n, chain),
+            // PostgREST's inclusive row range — what paged reads (lib.ts
+            // selectAll) walk the register with.
+            range: (from: number, to: number) => (offset = from, lim = to - from + 1, chain),
             // NOTE: `chain` is returned via strict() below; add new methods HERE.
 
             insert(rawRow: Any) {
@@ -613,7 +617,7 @@ export function makeDrillDb(): DrillDb {
                   pgCompare(a, b, orderCol!, { ascending: orderAsc, nullsFirst: orderNullsFirst })
                 );
               }
-              if (lim !== Infinity) out = out.slice(0, lim);
+              if (offset || lim !== Infinity) out = out.slice(offset, offset + lim);
               return res({ data: out, error: null });
             },
           };

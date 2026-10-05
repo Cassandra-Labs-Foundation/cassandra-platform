@@ -277,6 +277,19 @@ export async function postDetermineReportability(
       "Idempotent-Replayed": "true",
     });
   }
+  // EC-13 / SC-01: the assessment (data scope + member impact) is what the
+  // determination is made FROM. Refuse here as a state conflict rather than
+  // letting ck_incident_assessment_before_determination surface as a 500.
+  const { data: assessed, error: aErr } = await db.schema(scope).from("incident")
+    .select("assessment_completed_at").eq("id", id).maybeSingle();
+  if (aErr) return internalErrorResponse(requestId, aErr);
+  if (!assessed?.assessment_completed_at) {
+    return apiError(409, "assessment_required", requestId, {
+      title: "Assessment Required",
+      detail: `incident ${id} has no completed assessment; record the data scope and member ` +
+        "impact (POST /incidents/{id}/assessment) before determining reportability",
+    });
+  }
 
   const now = new Date();
   const reportable = rec.is_reportable === true;
