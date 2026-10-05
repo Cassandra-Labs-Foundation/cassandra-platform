@@ -8,7 +8,7 @@
 // 28 (account numbers) and 29 (KYC + OFAC floor). Every step acts as a real
 // partner (a cass_test partner token, not the ops bootstrap key) and checks the
 // row an examiner would read, not only the HTTP answer.
-import { api, assert, assertEq, core, flow, personaName, uid } from "./helpers.ts";
+import { actor, api, assert, assertEq, core, flow, personaName, uid } from "./helpers.ts";
 
 // --------------------------------------------------------------- local helpers
 //
@@ -549,4 +549,42 @@ flow("onboarding: KYC through the adapter — sims, attestations, providers, and
   } finally {
     await revoke(minted);
   }
+});
+
+// A partner whose create request times out retries it with the same
+// Idempotency-Key. The spec (create_entity) promises the retry replays the
+// first member rather than minting a duplicate, and that reusing the key for a
+// DIFFERENT member is a 409 — a duplicate person record is a CIP problem, not
+// a cosmetic one.
+flow("onboarding: a retried member create replays; the same key for someone else is refused", async (t) => {
+  const partner = await actor("partner");
+  const key = `flow-ent-${crypto.randomUUID()}`;
+  // run-unique: persona names rotate, so the "exactly one" check must not
+  // count a namesake from an earlier run
+  const person = { type: "person", name: `${personaName()} ${uid().slice(-6)}`, date_of_birth: "1985-02-03" };
+  let firstId = "";
+
+  await t.step("the first create succeeds", async () => {
+    const r = await api("POST", "/entities", person, { key: partner, idem: key });
+    assertEq(r.status, 201, `create (${JSON.stringify(r.body).slice(0, 200)})`);
+    firstId = String(r.body.id);
+  });
+
+  await t.step("the retry with the same key and body replays the same member", async () => {
+    const r = await api("POST", "/entities", person, { key: partner, idem: key });
+    assertEq(r.status, 201, `retry (${JSON.stringify(r.body).slice(0, 200)})`);
+    assertEq(String(r.body.id), firstId, "same member, not a duplicate");
+    assertEq(r.headers.get("Idempotent-Replayed"), "true", "marked as a replay");
+  });
+
+  await t.step("the same key for a different person is refused 409", async () => {
+    const r = await api("POST", "/entities", { ...person, name: `${person.name} Jr` }, { key: partner, idem: key });
+    assertEq(r.status, 409, `reuse (${JSON.stringify(r.body).slice(0, 200)})`);
+    assertEq(r.body.type, "idempotency_key_reused", "typed refusal");
+  });
+
+  await t.step("exactly one member exists under that name", async () => {
+    const rows = await core().from("entity").select("id").eq("name", person.name).eq("date_of_birth", "1985-02-03");
+    assertEq((rows.data ?? []).length, 1, "one entity row");
+  });
 });

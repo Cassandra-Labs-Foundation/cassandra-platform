@@ -6,6 +6,7 @@
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   apiError,
+  claimIdempotency,
   internalErrorResponse,
   isNonEmptyString,
   jsonResponse,
@@ -15,6 +16,7 @@ import {
   parseJsonBody,
   parsePageParams,
   sha256Hex,
+  storeIdempotencyResponse,
   validationError,
   type ValidationErrorItem,
 } from "./lib.ts";
@@ -108,24 +110,50 @@ export async function postEntity(
   }
   if (errors.length) return validationError(requestId, errors);
 
-  const id = `ent_${crypto.randomUUID()}`;
-  const row: Record<string, unknown> = {
-    id,
+  const fields = {
     type,
     name: body.name,
-    status: "pending",
     email: isNonEmptyString(body.email) ? body.email : null,
     date_of_birth: isNonEmptyString(body.date_of_birth) ? body.date_of_birth : null,
     tin: isNonEmptyString(body.tin) ? body.tin : null,
     jurisdiction: isNonEmptyString(body.jurisdiction) ? body.jurisdiction : null,
     address: isNonEmptyString(body.address) ? body.address : null,
-    owners: [],
   };
-  const { error } = await db.schema("core").from("entity").insert(withOwner(row, ctx));
-  if (error) return internalErrorResponse(requestId, error);
 
-  await emitEntityEvent(db, "entity.created", "entity", id, { type, name: body.name });
-  return jsonResponse(entityResponse({ ...row, created_at: new Date().toISOString() }), 201, requestId);
+  // D6, as the spec declares for create_entity: a partner retrying a timed-out
+  // create with the same Idempotency-Key gets the first member back, and the
+  // same key for a different person is a 409. This handler used to ignore the
+  // header, so every retry minted a duplicate member — a CIP problem, since
+  // one person then holds two identities (caught by the partner-flow suite).
+  // The key stays optional: a create without one is not deduplicated.
+  let id = `ent_${crypto.randomUUID()}`;
+  const idempotencyKey = req.headers.get("Idempotency-Key");
+  if (idempotencyKey) {
+    const claim = await claimIdempotency(
+      db, ctx.idempotencyScope, idempotencyKey, await sha256Hex(JSON.stringify(fields)), id, "POST /entities",
+    );
+    if (claim.kind === "replay") {
+      return jsonResponse(claim.responseBody, claim.responseStatus, requestId, { "Idempotent-Replayed": "true" });
+    }
+    if (claim.kind === "conflict") {
+      return apiError(409, "idempotency_key_reused", requestId, {
+        title: "Idempotency Key Reused",
+        detail: "Idempotency-Key was used with a different request body",
+      });
+    }
+    id = claim.transferId;
+  }
+
+  const row: Record<string, unknown> = { id, ...fields, status: "pending", owners: [] };
+  const { error } = await db.schema("core").from("entity").insert(withOwner(row, ctx));
+  // 23505 on a resumed claim: the earlier attempt inserted the row and died
+  // before storing its response — the member exists, so finish the job.
+  if (error && error.code !== "23505") return internalErrorResponse(requestId, error);
+  if (!error) await emitEntityEvent(db, "entity.created", "entity", id, { type, name: body.name });
+
+  const responseBody = entityResponse({ ...row, created_at: new Date().toISOString() });
+  if (idempotencyKey) await storeIdempotencyResponse(db, ctx.idempotencyScope, idempotencyKey, 201, responseBody);
+  return jsonResponse(responseBody, 201, requestId);
 }
 
 /** GET /entities — unified list across types; ?type= filters; paginated. */

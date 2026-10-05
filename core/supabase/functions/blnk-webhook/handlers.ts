@@ -135,6 +135,12 @@ async function applyTransaction(db: SupabaseClient, d: BlnkTransactionData): Pro
       }
     }
   }
+  // An opening deposit is stamped core_resource {table:"account"} (accounts.ts).
+  // There is no money row to patch — the account's balance mirror is the only
+  // thing it moves, and refreshBalanceMirrors handles that after this returns.
+  // Throwing here failed EVERY funded open: 224 failed inbox rows, each later
+  // dead-lettered into a HIGH finding (caught by the partner-flow suite).
+  if (table === "account") return;
   if (!table || !MONEY_TABLES.has(table)) {
     throw new Error(`no core row for transaction ${d.transaction_id ?? d.reference ?? "?"}`);
   }

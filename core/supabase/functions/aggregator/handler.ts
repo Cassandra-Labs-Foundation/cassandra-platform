@@ -296,7 +296,12 @@ export async function handleAggregator(
   const sagaMatch = path.match(/^\/originations\/([^/]+)\/(accept|reject)\/?$/);
   if (req.method === "POST" && sagaMatch) {
     const fn = sagaMatch[2] === "accept" ? "accept_origination" : "reject_origination";
-    const { data, error } = await deps.db.schema("aggregator").rpc(fn, { p_id: sagaMatch[1] });
+    // Scoped to the caller's instance (from the verified claims): another
+    // instance's origination is not_found, never resolvable (D23).
+    const { data, error } = await deps.db.schema("aggregator").rpc(fn, {
+      p_id: sagaMatch[1],
+      p_instance: verified.claims.instance_id,
+    });
     if (error) {
       console.error(`[${requestId}] ${fn} failed: ${error.message}`);
       return apiError(500, "internal_error", requestId, "Internal Error", `${fn} failed`);

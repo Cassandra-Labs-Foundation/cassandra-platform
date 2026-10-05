@@ -290,6 +290,9 @@ export async function postPaymentApproval(
  * nobody determined whether they should have been, and that has to be
  * enumerable rather than inferred from an absence.
  */
+/** items per list in one GET /eps/pending-approvals response */
+const QUEUE_PAGE = 200;
+
 export async function getPendingApprovals(
   _req: Request,
   db: SupabaseClient,
@@ -301,36 +304,47 @@ export async function getPendingApprovals(
     return notFoundResponse(requestId, "route", "/eps");
   }
 
-  const { data: pending, error } = await db.schema(scope).from("payment_approval")
-    .select("id, resource_type, resource_id, created_by, created_at, basis, threshold_cents")
+  // Oldest first (a work queue is cleared in arrival order), one page of
+  // QUEUE_PAGE — but the counts are the TRUE totals. They used to be the page
+  // length, so a queue of 508 reported 200 and nothing said the rest existed
+  // (caught by the partner-flow suite). `truncated` says when the page is not
+  // the whole queue.
+  const { data: pending, error, count: pendingTotal } = await db.schema(scope).from("payment_approval")
+    .select("id, resource_type, resource_id, created_by, created_at, basis, threshold_cents", { count: "exact" })
     .is("approved_at", null)
     .is("rejected_at", null)
     .order("created_at", { ascending: true })
-    .limit(200);
+    .limit(QUEUE_PAGE);
   if (error) return internalErrorResponse(requestId, error);
 
   const unassessed: { rail: string; id: string; amount: number }[] = [];
+  let unassessedTotal = 0;
   for (const rail of ["ach_transfer", "wire_transfer"]) {
-    const { data, error: uErr } = await db.schema(scope).from(rail)
-      .select("id, amount, dual_control_status")
+    const { data, error: uErr, count } = await db.schema(scope).from(rail)
+      .select("id, amount, dual_control_status", { count: "exact" })
       .eq("dual_control_status", "unassessed")
-      .limit(200);
+      .order("created_at", { ascending: true })
+      .limit(QUEUE_PAGE);
     if (uErr) return internalErrorResponse(requestId, uErr);
+    unassessedTotal += count ?? (data ?? []).length;
     for (const r of (data ?? []) as unknown as Record<string, unknown>[]) {
       unassessed.push({ rail, id: String(r.id), amount: Number(r.amount ?? 0) });
     }
   }
 
+  const pendingCount = pendingTotal ?? (pending ?? []).length;
   return jsonResponse({
     pending: (pending ?? []) as unknown[],
-    pending_count: ((pending ?? []) as unknown[]).length,
+    pending_count: pendingCount,
+    pending_truncated: pendingCount > (pending ?? []).length,
     // NOT the same as pending: nobody decided whether these needed approval
     unassessed,
-    unassessed_count: unassessed.length,
-    ...(unassessed.length
+    unassessed_count: unassessedTotal,
+    unassessed_truncated: unassessedTotal > unassessed.length,
+    ...(unassessedTotal
       ? {
         warning:
-          `${unassessed.length} payment(s) could not be assessed for dual control ` +
+          `${unassessedTotal} payment(s) could not be assessed for dual control ` +
           `because no client limit is configured; they were NOT blocked and NOT ` +
           `determined exempt (OQ-14)`,
       }

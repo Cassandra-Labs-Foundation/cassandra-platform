@@ -51,7 +51,8 @@ export interface BlnkTransaction {
   reference: string;
   status: string;
   amount?: number;
-  precise_amount?: number;
+  /** Blnk's search index returns this as a STRING; the transactions API as a number */
+  precise_amount?: number | string;
   precision?: number;
   currency?: string;
   source?: string;

@@ -52,7 +52,15 @@ if [ "$DEPLOY" = 1 ]; then
   fi
 fi
 
-args=(--allow-net --allow-env core/verifier/flows/)
+# Type-check separately and only WARN: deno test type-checks every file in the
+# directory, so one half-written flow (someone else's, mid-edit) would crash
+# every run. A real error in the flow you're running still fails at runtime.
+if ! tc=$(deno check core/verifier/flows/*.ts 2>&1); then
+  echo "warning: type errors (not blocking):"
+  grep -E 'ERROR|    at ' <<<"$tc" | head -6 | sed 's/^/  /'
+fi
+
+args=(--no-check --allow-net --allow-env core/verifier/flows/)
 [ -n "$FILTER" ] && args=(--filter "$FILTER" "${args[@]}")
 
 pass=0

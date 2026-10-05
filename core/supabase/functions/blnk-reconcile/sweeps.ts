@@ -31,6 +31,9 @@ export const BLNK_BALANCE_ID_PREFIX = "bln_";
 
 export const TXN_TABLES = ["ach_transfer", "wire_transfer", "transfer"] as const;
 export const MIRROR_TABLES = [
+  // opening deposits are stamped core_resource {table:"account"} (accounts.ts);
+  // without it every funded open would read as an "unknown table" orphan
+  "account",
   "ach_transfer",
   "wire_transfer",
   "transfer",
@@ -124,10 +127,39 @@ async function resolveInflightChildren(
   return null;
 }
 
-function sumAppliedAmount(children: { status: string; precise_amount?: number }[]): number {
+/**
+ * Blnk's search index serves `precise_amount` as a STRING ("30000"). Summing
+ * only numbers made every partially captured hold re-sum to 0, and the sweep
+ * then "repaired" the correct running total to 0 every run — live, on every
+ * partial card capture (caught by the partner-flow suite).
+ */
+export function centsOf(v: unknown): number {
+  if (typeof v === "number") return Number.isInteger(v) ? v : 0;
+  if (typeof v === "string" && /^-?\d+$/.test(v.trim())) return Number(v.trim());
+  return 0;
+}
+
+function sumAppliedAmount(children: { status: string; precise_amount?: unknown }[]): number {
   return children
     .filter((c) => c.status === "APPLIED")
-    .reduce((sum, c) => sum + (typeof c.precise_amount === "number" ? c.precise_amount : 0), 0);
+    .reduce((sum, c) => sum + centsOf(c.precise_amount), 0);
+}
+
+/**
+ * Blnk's search index serves `created_at` as epoch SECONDS (1791071339), not
+ * an ISO string. The missing-mirror sweep skipped anything that was not a
+ * string, so it had examined nothing since 2026-07-15 and never once emitted
+ * blnk.missing_mirror. Normalised to ISO; null when unusable.
+ */
+export function isoOf(v: unknown): string | null {
+  let ms: number;
+  if (typeof v === "number") ms = v < 1e12 ? v * 1000 : v;
+  else if (typeof v === "string" && /^\d+$/.test(v.trim())) {
+    const n = Number(v.trim());
+    ms = n < 1e12 ? n * 1000 : n;
+  } else if (typeof v === "string") ms = Date.parse(v);
+  else return null;
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
 // sweepTxnTable is GONE with core.<rail>.blnk_status (migration 20260817000500).
@@ -354,7 +386,7 @@ async function emitMissingMirror(
   }
   if (existing && existing.length > 0) return;
 
-  const createdAt = typeof txn.created_at === "string" ? txn.created_at : null;
+  const createdAt = isoOf(txn.created_at);
   const { error: insErr } = await db.schema("core").from("event").insert({
     id: crypto.randomUUID(),
     code: "blnk.missing_mirror",
@@ -493,10 +525,9 @@ export async function sweepMissingMirrors(
 
       let oldestMsOnPage = Infinity;
       for (const txn of txns) {
-        const createdAt = txn.created_at;
-        if (typeof createdAt !== "string") continue;
+        const createdAt = isoOf(txn.created_at);
+        if (createdAt === null) continue;
         const ms = Date.parse(createdAt);
-        if (Number.isNaN(ms)) continue;
 
         if (ms < oldestMsOnPage) oldestMsOnPage = ms;
         if (ms > eligibleMaxMs) continue; // too young — leave for the next run
@@ -517,8 +548,7 @@ export async function sweepMissingMirrors(
   for (const txn of collected) {
     const txnId = txn.transaction_id;
 
-    const createdAt = txn.created_at;
-    if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) {
+    if (isoOf(txn.created_at) === null) {
       errors.push({ table: "blnk_search", id: txnId, error: "unparseable created_at" });
       continue;
     }
