@@ -362,7 +362,28 @@ export type IdempotencyClaim =
   | { kind: "fresh"; transferId: string }
   | { kind: "replay"; responseStatus: number; responseBody: unknown }
   | { kind: "resume"; transferId: string }
+  | { kind: "in_progress" }
   | { kind: "conflict" };
+
+/**
+ * How long a claim with no stored response is treated as STILL RUNNING rather
+ * than crashed. Inside the window a same-key retry is told to come back
+ * (`in_progress`); after it, the claim is resumed as crash recovery. Concurrent
+ * retries used to resume immediately and race the original: a duplicate
+ * insert (500) and a duplicate Blnk post (502), though the money moved once
+ * (caught by the ledger partner-flow suite).
+ */
+export const IDEMPOTENCY_IN_FLIGHT_SECS = 60;
+
+/** 409 for a same-key retry that arrives while the original is still running. */
+export function idempotencyInProgressResponse(requestId: string): Response {
+  const res = apiError(409, "idempotency_request_in_progress", requestId, {
+    title: "Request In Progress",
+    detail: "A request with this Idempotency-Key is still being processed; retry shortly",
+  });
+  res.headers.set("Retry-After", "1");
+  return res;
+}
 
 /**
  * Claim an Idempotency-Key for one partner.
@@ -399,7 +420,7 @@ export async function claimIdempotency(
   }
 
   const { data, error: fetchErr } = await db.schema("core").from("idempotency_keys")
-    .select("idempotency_key, endpoint, request_hash, response_status, response_body, blnk_reference")
+    .select("idempotency_key, endpoint, request_hash, response_status, response_body, blnk_reference, created_at")
     .eq("partner_id", partnerId)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
@@ -416,6 +437,11 @@ export async function claimIdempotency(
       responseStatus: row.response_status,
       responseBody: row.response_body,
     };
+  }
+
+  const claimedAt = Date.parse(String((row as IdempotencyRow & { created_at?: string }).created_at ?? ""));
+  if (Number.isFinite(claimedAt) && Date.now() - claimedAt < IDEMPOTENCY_IN_FLIGHT_SECS * 1000) {
+    return { kind: "in_progress" };
   }
 
   const resumeId = row.blnk_reference ?? transferId;

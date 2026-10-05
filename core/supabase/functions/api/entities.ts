@@ -19,6 +19,7 @@ import {
   storeIdempotencyResponse,
   validationError,
   type ValidationErrorItem,
+  idempotencyInProgressResponse,
 } from "./lib.ts";
 import { scopeToPartner, withOwner } from "./ownership.ts";
 import { type PartnerContext } from "./auth.ts";
@@ -135,6 +136,7 @@ export async function postEntity(
     if (claim.kind === "replay") {
       return jsonResponse(claim.responseBody, claim.responseStatus, requestId, { "Idempotent-Replayed": "true" });
     }
+    if (claim.kind === "in_progress") return idempotencyInProgressResponse(requestId);
     if (claim.kind === "conflict") {
       return apiError(409, "idempotency_key_reused", requestId, {
         title: "Idempotency Key Reused",

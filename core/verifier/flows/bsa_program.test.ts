@@ -312,7 +312,8 @@ flow("bsa_program: a member is re-screened and hits — the hold stops their mon
   });
 
   await t.step("while held, the member's money does not move", async () => {
-    // DEFECT: an OFAC hold is only a core.ofac_screen row — nothing in transfers/wires/ach reads ofac_screen (grep), so a held member can still send money; the 409 says "the subject is blocked pending review"
+    // Regression guard (bug found by this flow, fixed 2026-10-05): the hold was
+    // only a core.ofac_screen row that no rail read; runGate now refuses 423.
     const before = await balanceOf(partner, held.account);
     const r = await api("POST", "/transfers", {
       source_account_id: held.account, destination_account_id: clean.account,

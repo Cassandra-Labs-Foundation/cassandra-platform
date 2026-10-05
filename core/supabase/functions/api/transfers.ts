@@ -26,6 +26,7 @@ import {
   transferRequestHash,
   validationError,
   type ValidationErrorItem,
+  idempotencyInProgressResponse,
 } from "./lib.ts";
 import { scopeToPartner } from "./ownership.ts";
 import { type PartnerContext } from "./auth.ts";
@@ -130,6 +131,57 @@ export async function runGate(
         resource_type: resource.type,
       },
     };
+  }
+
+  // BSA-05: an open OFAC hold on the member stops their money. A re-screen hit
+  // answers 409 "the subject is blocked pending review" and writes the hold to
+  // core.ofac_screen — but nothing on the payment rails read it, so a held
+  // member could still send money until the officer cleared them (caught by
+  // the bsa_program partner-flow suite). Checked here, after safe mode and
+  // before every other control, because runGate is the one door every rail
+  // goes through. Outbound only: whether funds arriving FOR a held member are
+  // refused or frozen is a sanctions-handling decision this gate doesn't make.
+  const { data: owner, error: ownerErr } = await db.schema("core").from("account")
+    .select("entity_id").eq("id", sourceAccountId).maybeSingle();
+  if (ownerErr) throw new Error(`account owner lookup (OFAC hold): ${ownerErr.message}`);
+  const entityId = (owner as { entity_id: string | null } | null)?.entity_id ?? null;
+  if (entityId) {
+    const { data: holds, error: holdErr } = await db.schema("core").from("ofac_screen")
+      .select("id")
+      .eq("subject_kind", "entity")
+      .eq("subject_ref", entityId)
+      .not("hold_placed_at", "is", null)
+      .is("hold_released_at", null)
+      .limit(1);
+    if (holdErr) throw new Error(`ofac_screen lookup: ${holdErr.message}`);
+    if ((holds ?? []).length) {
+      const { error: crErr } = await db.schema("core").from("control_result").insert({
+        id: `cr_${crypto.randomUUID()}`,
+        provenance: provenanceFor("core", ctx),
+        control_id: "CG-OFAC-01",
+        decision: "block",
+        event: transferId,
+        subject_ref: sourceAccountId,
+      });
+      if (crErr) throw new Error(`control_result insert (CG-OFAC-01 hold): ${crErr.message}`);
+      const { error: rejErr } = await db.schema("core").from(resource.table)
+        .update({ status: resource.rejectedStatus })
+        .eq("id", transferId);
+      if (rejErr) throw new Error(`${resource.table} reject update (OFAC hold): ${rejErr.message}`);
+      return {
+        blocked: true,
+        status: 423,
+        body: {
+          status: 423,
+          type: "ofac_hold",
+          title: "OFAC Hold",
+          detail: "the account holder is under an OFAC hold pending the BSA Officer's review; no money moves until it is released",
+          doc_url: "https://api.cassandra.bank/docs/errors/ofac-hold",
+          resource_id: transferId,
+          resource_type: resource.type,
+        },
+      };
+    }
   }
 
   // CG-VEL-01 is a per-account DAILY cap, so it must aggregate every rail the
@@ -698,6 +750,7 @@ export async function postTransfer(
     );
   }
 
+  if (claim.kind === "in_progress") return idempotencyInProgressResponse(requestId);
   if (claim.kind === "conflict") {
     return apiError(409, "idempotency_key_reused", requestId, {
       title: "Idempotency Key Reused",

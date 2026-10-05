@@ -518,6 +518,12 @@ flow("ledger: client — concurrent retries of one transfer post to the ledger e
     // DEFECT: two ways, both while the money DID move once. (a) 500 internal_error — api/transfers.ts:690-712: a concurrent retry claims `resume`, finds no transfer row yet, inserts the same id and throws "transfer insert: duplicate key". (b, inferred from the response — no function log read) 502 bank_error — _shared/blnk.ts:291-316: the retry that reaches Blnk second hits the duplicate-reference path, looks the original up in Blnk's eventually-consistent search index (line 298), finds nothing yet, and throws BlnkError instead of resolving to the existing move
     const errs = responses.filter((r) => r.status >= 500);
     assertEq(errs.length, 0, `5xx responses to an idempotent retry: ${errs.map((r) => brief(r.body)).join(" | ")}`);
+    // Regression guard (fixed 2026-10-05): a retry that arrives while the
+    // original is still running is told so — a typed 409 — rather than racing it.
+    for (const r of responses.filter((r) => r.status !== 201)) {
+      assertEq(r.status, 409, `a non-success retry is a 409 (${brief(r.body)})`);
+      assertEq(r.body.type, "idempotency_request_in_progress", "typed in-progress refusal");
+    }
   });
 });
 

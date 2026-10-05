@@ -26,6 +26,7 @@ import {
   storeIdempotencyResponse,
   validationError,
   type ValidationErrorItem,
+  idempotencyInProgressResponse,
 } from "./lib.ts";
 import { scopeToPartner } from "./ownership.ts";
 import { provenanceFor, raiseAlert } from "./bsa.ts";
@@ -221,6 +222,7 @@ export async function postAch(
       "Idempotent-Replayed": "true",
     });
   }
+  if (claim.kind === "in_progress") return idempotencyInProgressResponse(requestId);
   if (claim.kind === "conflict") {
     return apiError(409, "idempotency_key_reused", requestId, {
       title: "Idempotency Key Reused",
