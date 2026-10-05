@@ -8,9 +8,9 @@
       "tech": "runGate · cross-rail daily sum",
       "intent": "Monitoring should identify activity that needs review. The entry conditions determine which movements reach this detector.",
       "behavior": "The API first totals today’s qualifying outgoing movements across four rails. If the total including this movement exceeds $25,000, it blocks and returns before the large-movement detector.",
-      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. When safe mode (RS-03) is active it is checked first inside runGate, on every rail, so a movement it refuses never reaches the velocity cap or this detector. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
+      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. When safe mode (RS-03) is active it is checked first inside runGate, on every rail, and then an open OFAC hold on the paying member (BSA-05); a movement either refuses never reaches the velocity cap or this detector. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 150,
+      "line": 202,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 219,
       "contract": "Reads transfer, wire_transfer, ach_transfer and card_authorization. Uses UTC day boundaries and selected statuses; it is not a rolling 24-hour window."
@@ -25,7 +25,7 @@
       "behavior": "A movement greater than $10,000 creates a passing control result and calls the alert writer. Exactly $10,000 does not match this rule.",
       "boundary": "The alert is named ctr_threshold in code. That name alone does not demonstrate that cash reporting obligations are satisfied.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 213,
+      "line": 265,
       "test": "core/verifier/flows/onboard_transfer_large_txn.test.ts",
       "testline": 60,
       "contract": "Writes control_result with decision=pass. subject_ref is the source account; entity_hash is SHA-256 of the source account ID."
@@ -40,7 +40,7 @@
       "behavior": "Records a blocking velocity result, updates the movement to its rail-specific rejection status, and returns an error.",
       "boundary": "This is a neighboring payment gate, included here because it changes this control’s reach.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 184,
+      "line": 236,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 219,
       "contract": "Returns blocked=true and velocity_limit_exceeded. Writes are awaited and errors throw."
@@ -70,7 +70,7 @@
       "behavior": "Amounts at or below $10,000 skip this detector. Subsequent structuring and other payment checks can still run.",
       "boundary": "“No alert from this rule” does not mean the movement is safe, compliant, or guaranteed to settle.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 242,
+      "line": 294,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 188,
       "contract": "Control returns to the remainder of runGate. This branch is not the end of payment processing."
@@ -424,7 +424,7 @@
     "reviewedAt": "2026-10-03",
     "method": "Manual source trace",
     "sources": {
-      "core/supabase/functions/api/transfers.ts": "4312995cf00ea675119f4be8e7747cb962ffa5f081bae0bccabe9a9a0a0a8849",
+      "core/supabase/functions/api/transfers.ts": "4b7529193365165582b43c9545e30ea4a6840964b2099198ad06ded3befbf71f",
       "core/verifier/flows/transfers.test.ts": "bcb54b0985c73e8156cda76a10cf632d6461d8d594f29fb5f733188088648f8b",
       "core/verifier/flows/onboard_transfer_large_txn.test.ts": "d082613a09fa522aaba59758280a735b2adccceb18f73576914ca3a12a59b8d1",
       "core/supabase/functions/api/bsa.ts": "b59c82e4a93c34e606b0d68423389f453151e429ee28f05c5358a42b5c5d4fdd",
@@ -432,9 +432,9 @@
       "compliance/policies/bsa/bsa.md": "86c729ae3ed00a0132d8d2044c1cdd15d1e36ebebf71840fa8239795291a1bd9",
       "core/supabase/functions/api/index.ts": "ee8ca9aed00064ab7a6fdefa636aa5fe119fbb806787053e9436ced5900132b9",
       "core/supabase/functions/api/auth.ts": "8179a973262b4a42e69cfbf9c1748c8f1cb7a5d458d5e0e3549d5181658d4c0b",
-      "core/supabase/functions/api/ach.ts": "a835b3fdf6099b982c69b457201400d101bdd165a62a1ccc35aad4f5b83a39af",
-      "core/supabase/functions/api/wires.ts": "d69f149a6e09e4357da9bca6129c7b624c85c406feffd697805b31216fb290e3",
-      "core/supabase/functions/api/cards.ts": "a95bec8877929ba6195a49f12b5613b5a9449d65af8577b2c01e5cb96e0030bf",
+      "core/supabase/functions/api/ach.ts": "44c81aebae50fb3568f6b8adf14e0c8a7d0f8a10974bbeccf52edea8bdfb2287",
+      "core/supabase/functions/api/wires.ts": "c4b23848a78c82f5a45a4f8d642a2cc7c987208aaae83cf8021f979ea17a52e0",
+      "core/supabase/functions/api/cards.ts": "8aa99996cd74671a89a59878e295f4c290cb4cf6d06b04d781c9df64b07a9c69",
       "core/supabase/functions/api/cda.ts": "1b9c725c7e39949e409a3204d92fa0f3cc4084a5bd942939d746528d6f7d9e0a",
       "scripts/rebuild_artifacts.sh": "35f73afe052fef60086e626038e9a2616a11022c164277799da19adcea304d32"
     }
