@@ -1222,6 +1222,18 @@ async function runInvestmentLifecycle(env: FireEnv): Promise<void> {
     }, { onConflict: "id" });
   }
 
+  // IP-14: the segregation matrix needs to know what role each actor holds,
+  // and it binds to the CREDENTIAL — so each role acts under its own token id,
+  // registered BEFORE anyone trades (an unregistered executor is refused).
+  for (const [u, role] of [
+    ["trader_1", "execution"], ["trader_2", "execution"],
+    ["ops_confirm", "confirmation"], ["ops_settle", "settlement"], ["cio_1", "oversight"],
+  ]) {
+    await putUserRole(R({ role }), u, env.db, "d", ops);
+  }
+
+  const as = (u: string) => ({ ...ops, tokenId: u });
+
   // clean trade — id captured from the RESPONSE: scanning env.rows for
   // executed trades breaks on the live tier, where the recorder also appends
   // id-less update payloads (the trade_exception FK refusals' cause)
@@ -1231,7 +1243,7 @@ async function runInvestmentLifecycle(env: FireEnv): Promise<void> {
         price_bp: 9950, executed_by: "trader_1", maturity_months: 60,
         checklist_completed: true, instrument_type: "bill",
         settlement_amount_cents: 29_850_000, valuation_support: "bloomberg_quote" }),
-    env.db, "d", ops,
+    env.db, "d", as("trader_1"),
   );
   const cleanTradeId = String(
     ((await cleanTradeRes.clone().json().catch(() => ({}))) as Any)?.data?.id ?? "x",
@@ -1241,21 +1253,21 @@ async function runInvestmentLifecycle(env: FireEnv): Promise<void> {
     R({ security_id: "sec_cmo1", instrument_class: "collateralized_mortgage_obligation",
         issuer_ref: "acme", intermediary_id: "interm_northgatesecurities", side: "buy",
         par_cents: 1_000_000, executed_by: "trader_1", checklist_completed: true }),
-    env.db, "d", ops,
+    env.db, "d", as("trader_1"),
   );
   // NEGATIVE: an unapproved counterparty
   await postTrade(
     R({ security_id: "sec_ust1", instrument_class: "us_treasury", issuer_ref: "us_gov",
         intermediary_id: "interm_backstreetbrokers", side: "buy", par_cents: 1_000_000,
         executed_by: "trader_1", checklist_completed: true }),
-    env.db, "d", ops,
+    env.db, "d", as("trader_1"),
   );
   // NEGATIVE: no pre-purchase checklist
   await postTrade(
     R({ security_id: "sec_ust1", instrument_class: "us_treasury", issuer_ref: "us_gov",
         intermediary_id: "interm_northgatesecurities", side: "buy", par_cents: 1_000_000,
         executed_by: "trader_1" }),
-    env.db, "d", ops,
+    env.db, "d", as("trader_1"),
   );
   // lands in the WARNING band: 30m held + 300m = 330m against 750m of net
   // worth is 4400bp, over the 4000bp warning and under the 5000bp limit. The
@@ -1267,7 +1279,7 @@ async function runInvestmentLifecycle(env: FireEnv): Promise<void> {
         price_bp: 9950, executed_by: "trader_2", maturity_months: 60,
         checklist_completed: true, instrument_type: "note",
         settlement_amount_cents: 298_500_000, valuation_support: "bloomberg_quote" }),
-    env.db, "d", ops,
+    env.db, "d", as("trader_2"),
   );
   const warnTradeId = String(
     ((await warnTradeRes.clone().json().catch(() => ({}))) as Any)?.data?.id ?? "x",
@@ -1278,27 +1290,19 @@ async function runInvestmentLifecycle(env: FireEnv): Promise<void> {
     R({ security_id: "sec_ust1", instrument_class: "us_treasury", issuer_ref: "us_gov",
         intermediary_id: "interm_northgatesecurities", side: "buy", par_cents: 100_000_000,
         executed_by: "trader_1", checklist_completed: true }),
-    env.db, "d", ops,
+    env.db, "d", as("trader_1"),
   );
-
-  // IP-14: the segregation matrix needs to know what role each actor holds.
-  for (const [u, role] of [
-    ["trader_1", "execution"], ["trader_2", "execution"],
-    ["ops_confirm", "confirmation"], ["ops_settle", "settlement"], ["cio_1", "oversight"],
-  ]) {
-    await putUserRole(R({ role }), u, env.db, "d", ops);
-  }
 
   const tid = cleanTradeId;
   // NEGATIVE: the executing trader cannot confirm their own trade
   await postTradeConfirmation(
     R({ confirmed_by: "trader_1", confirmation_ref: "c1", counterparty_par_cents: 30_000_000 }),
-    tid, env.db, "d", ops,
+    tid, env.db, "d", as("trader_1"),
   );
   // a real confirmation, with a MISMATCH against the counterparty's figures
   await postTradeConfirmation(
     R({ confirmed_by: "ops_confirm", confirmation_ref: "c1", counterparty_par_cents: 29_000_000 }),
-    tid, env.db, "d", ops,
+    tid, env.db, "d", as("ops_confirm"),
   );
   // and one that MATCHES, so "matched" is not simply an event nobody can reach
   if (warnTradeId !== "x" && warnTradeId !== tid) {
@@ -1307,12 +1311,12 @@ async function runInvestmentLifecycle(env: FireEnv): Promise<void> {
         confirmed_by: "ops_confirm", confirmation_ref: "c2",
         counterparty_par_cents: 300_000_000,
       }),
-      warnTradeId, env.db, "d", ops,
+      warnTradeId, env.db, "d", as("ops_confirm"),
     );
   }
   // NEGATIVE: the executing trader cannot settle either
-  await postTradeReconciliation(R({ settled_by: "trader_1" }), tid, env.db, "d", ops);
-  await postTradeReconciliation(R({ settled_by: "ops_settle" }), tid, env.db, "d", ops);
+  await postTradeReconciliation(R({ settled_by: "trader_1" }), tid, env.db, "d", as("trader_1"));
+  await postTradeReconciliation(R({ settled_by: "ops_settle" }), tid, env.db, "d", as("ops_settle"));
 
   await postTradeException(
     R({ trade_id: tid, kind: "limit_waiver", detail: { bp: 100 }, raised_by: "trader_1",
@@ -1472,7 +1476,7 @@ async function runComplaintsLifecycle(env: FireEnv): Promise<void> {
     env.db, "d", ops,
   );
   const d1 = String((env.rows["core.dispute"] ?? [])[0]?.id ?? "x");
-  await postProvisionalCredit(R({}), d1, env.db, "d", ops);
+  await postProvisionalCredit(R({}), d1, env.db, env.cfg, "d", ops);
   // NEGATIVE: resolving with no findings
   await postDisputeResolve(R({}), d1, env.db, "d", ops);
   await postDisputeResolve(
@@ -1733,21 +1737,30 @@ async function runBsaProgramLifecycle(env: FireEnv): Promise<void> {
     env.db, "d", ops,
   );
 
-  // Travel Rule: a compliant wire and one missing its originator record
+  // Travel Rule: a compliant wire and one missing its originator record. The
+  // record now binds to a REAL wire at its real amount, so the wires must
+  // exist first (real wire_transfer shape — see the EPS-06 fixture below).
+  const [wTr1, wTr2, wTr3] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+  for (const [id, amount] of [[wTr1, 500_000], [wTr2, 900_000], [wTr3, 100_000]] as const) {
+    await env.db.schema("core").from("wire_transfer").upsert({
+      id, partner_id: "ptnr_drill", amount,
+      beneficiary: { name: "Bob Payee" }, status: "pending_approval",
+    }, { onConflict: "id" });
+  }
   await postTravelRuleRecord(
-    R({ wire_ref: "wire_tr1", amount_cents: 500_000,
+    R({ wire_ref: wTr1, amount_cents: 500_000,
         originator: { name: "Alice Chen", address: "1 Main St", account: "acct_1",
                       routing_number: "021000021", reference: "ref-1" },
         beneficiary: { name: "Bob Payee", account: "ext_9" } }),
     env.db, "d", ops,
   );
   await postTravelRuleRecord(
-    R({ wire_ref: "wire_tr2", amount_cents: 900_000, beneficiary: { name: "Bob Payee" } }),
+    R({ wire_ref: wTr2, amount_cents: 900_000, beneficiary: { name: "Bob Payee" } }),
     env.db, "d", ops,
   );
   // below the threshold nothing attaches
   await postTravelRuleRecord(
-    R({ wire_ref: "wire_tr3", amount_cents: 100_000 }), env.db, "d", ops,
+    R({ wire_ref: wTr3, amount_cents: 100_000 }), env.db, "d", ops,
   );
 
   // CMIR — the shipment register is built by cash operations. Seed it
@@ -1824,15 +1837,21 @@ async function runBsaProgramLifecycle(env: FireEnv): Promise<void> {
     String(esc?.id ?? "x"), env.db, "d", officer,
   );
 
-  // SAR lifecycle: the timer, a continuing filing, and a disclosure refusal
-  await postSarLifecycle(R({ stage: "timer" }), "case_bsa1", env.db, "d", officer);
+  // SAR lifecycle: the timer, a continuing filing, and a disclosure refusal.
+  // Against a REAL case — the handler now refuses ids that don't exist.
+  const sarCase = `case_bsa1_${env.n()}`;
+  await env.db.schema("core").from("case").upsert({
+    id: sarCase, type: "investigation", status: "opened",
+    opened_at: new Date().toISOString(), opened_by: "tok_inv_1", provenance: "demo",
+  }, { onConflict: "id" });
+  await postSarLifecycle(R({ stage: "timer" }), sarCase, env.db, "d", officer);
   await postSarLifecycle(
     R({ stage: "continuing", filed_by: "bsa_officer", fincen_ref: "SAR-2026-2" }),
-    "case_bsa1", env.db, "d", officer,
+    sarCase, env.db, "d", officer,
   );
   await postSarLifecycle(
     R({ stage: "disclosure_request", requester: "subject's attorney" }),
-    "case_bsa1", env.db, "d", officer,
+    sarCase, env.db, "d", officer,
   );
 
   // BSA-08: a CTR aggregation that reaches the threshold is FILED. The
@@ -3202,10 +3221,16 @@ async function runCapitalLifecycle(env: FireEnv): Promise<void> {
   const cfo = { ...env.actors.ops, tokenId: "tok_cfo", roles: ["cfo"] };
 
   // CP-01: a Board-approved internal target, above the statutory floor and
-  // approved by someone other than its proposer.
+  // approved by someone other than its proposer. CP-03 four eyes binds to the
+  // CREDENTIAL, so it takes two calls by two tokens: the proposal on file,
+  // then the approval by a different one.
+  await postCapitalTarget(
+    R({ effective_date: "2026-01-01", target_bp: 900, proposed_by: "cfo_01" }),
+    env.db, "d", cco,
+  );
   await postCapitalTarget(
     R({ effective_date: "2026-01-01", target_bp: 900, proposed_by: "cfo_01", approved_by: "board_chair" }),
-    env.db, "d", cco,
+    env.db, "d", { ...cco, tokenId: "tok_board" },
   );
   // NEGATIVE: a target BELOW the 700bp floor must be refused, not stored as a
   // target that can never be breached.

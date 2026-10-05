@@ -74,6 +74,14 @@ export interface GateResource {
   rejectedStatus: string;
 }
 
+/** safe_mode.restricted_types vocabulary, keyed by rail table */
+const SAFE_MODE_TXN_TYPE: Record<string, string> = {
+  transfer: "transfer",
+  wire_transfer: "wire",
+  ach_transfer: "ach",
+  card_authorization: "card",
+};
+
 export const TRANSFER_RESOURCE = (id: string): GateResource => ({
   table: "transfer",
   type: "transfer",
@@ -94,6 +102,35 @@ export async function runGate(
   const controlResults: ControlResultRef[] = [];
   const sourceAccountId = sourceAccount.id;
   const transferId = resource.id;
+
+  // RS-03: while safe mode is active its cap and restricted types gate BEFORE
+  // the ordinary controls — resolution posture outranks them, and the decision
+  // (either way) leaves safe_mode.transaction.decided evidence. This lived in
+  // the book-transfer handler only, so wires, ACH and card holds sailed past an
+  // active safe mode (caught by the member-protection flow). runGate is the
+  // one door every rail goes through.
+  const safeMode = await safeModeGate(
+    db, amountCents, SAFE_MODE_TXN_TYPE[resource.table] ?? resource.type, transferId, ctx,
+  );
+  if (safeMode.restricted) {
+    const { error: rejErr } = await db.schema("core").from(resource.table)
+      .update({ status: resource.rejectedStatus })
+      .eq("id", transferId);
+    if (rejErr) throw new Error(`${resource.table} reject update (safe mode): ${rejErr.message}`);
+    return {
+      blocked: true,
+      status: 423,
+      body: {
+        status: 423,
+        type: "safe_mode_restricted",
+        title: "Safe Mode Restricted",
+        detail: safeMode.reason,
+        doc_url: "https://api.cassandra.bank/docs/errors/safe-mode-restricted",
+        resource_id: transferId,
+        resource_type: resource.type,
+      },
+    };
+  }
 
   // CG-VEL-01 is a per-account DAILY cap, so it must aggregate every rail the
   // member can move money on. Summing only core.transfer would let them evade
@@ -732,29 +769,7 @@ export async function postTransfer(
   if (transferRow.status === "settled") {
     controlResults.push(...await loadControlResults(db, transferId));
   } else {
-    // RS-03: while safe mode is active, the cap gates BEFORE the control
-    // gate — resolution posture outranks ordinary controls, and the decision
-    // (either way) leaves safe_mode.transaction.decided evidence.
-    const safeMode = await safeModeGate(db, amount, "transfer", transferId, ctx);
-    if (safeMode.restricted) {
-      const body = {
-        status: 423,
-        type: "safe_mode_restricted",
-        title: "Safe Mode Restricted",
-        detail: safeMode.reason,
-        doc_url: "https://api.cassandra.bank/docs/errors/safe-mode-restricted",
-        resource_id: transferId,
-        resource_type: "transfer",
-      };
-      // "rejected" is THIS rail's blocked status — rails do not share vocab
-      await db.schema("core").from("transfer")
-        .update({ status: "rejected" }).eq("id", transferId);
-      await storeIdempotencyResponse(db, ctx.idempotencyScope, idempotencyKey, 423, {
-        ...body, request_id: requestId,
-      });
-      return errorResponse(423, requestId, body);
-    }
-
+    // RS-03 safe mode is checked first inside runGate, for every rail.
     const gate = await runGate(db, cfg, TRANSFER_RESOURCE(transferId), sourceAccount, destAccount, amount, ctx);
     if (gate.blocked) {
       const stored = { ...gate.body, request_id: requestId };

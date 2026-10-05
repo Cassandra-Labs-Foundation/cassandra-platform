@@ -26,6 +26,7 @@ import { getCase } from "./bsa.ts";
 import { getEntity } from "./entities.ts";
 import { postPaymentApproval } from "./eps.ts";
 import { postEstatePayout, postExpulsionClose } from "./member_protection.ts";
+import { postProvisionalCredit } from "./complaints.ts";
 import {
   createDb,
   createRequestId,
@@ -467,6 +468,17 @@ const routes: Route[] = [
   // is sized from the member's LEDGER balance, not from core.account.balance
   // (see memberBalanceCents), so these two handlers take a BlnkConfig and the
   // generated signature cannot supply one.
+  {
+    // hand-routed: posts the Reg E credit to the ledger, so it takes the Blnk
+    // config (and the drill injects a fake one). Self-gates internal actors.
+    method: "POST",
+    pattern: /^\/disputes\/([^/]+)\/provisional-credit\/?$/,
+    paramNames: ["id"],
+    endpoint: "POST /disputes/{id}/provisional-credit",
+    tier: "write",
+    handler: async (req, params, requestId, ctx) =>
+      await postProvisionalCredit(req, params.id, createDb(), blnkConfigFromEnv(), requestId, ctx),
+  },
   {
     method: "POST",
     pattern: /^\/estate-claims\/([^/]+)\/payout\/?$/,

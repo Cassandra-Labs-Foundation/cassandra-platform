@@ -127,7 +127,6 @@ import {
   postComplaintTrend,
   postDispute,
   postDisputeResolve,
-  postProvisionalCredit,
 } from "./complaints.ts";
 import { getDashboardData } from "./dashboard.ts";
 import {
@@ -1293,13 +1292,6 @@ export const generatedRoutes: Route[] = [
     audience: "internal",
     handler: async (req, _params, requestId, ctx) =>
       await postDispute(req, createDb(), requestId, ctx),
-  },
-  {
-    method: "POST", pattern: /^\/disputes\/([^\/]+)\/provisional-credit\/?$/,
-    endpoint: "POST /disputes/{id}/provisional-credit", tier: "write", paramNames: ["id"],
-    audience: "internal",
-    handler: async (req, params, requestId, ctx) =>
-      await postProvisionalCredit(req, params.id, createDb(), requestId, ctx),
   },
   {
     method: "POST", pattern: /^\/disputes\/([^\/]+)\/resolve\/?$/,

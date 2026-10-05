@@ -445,6 +445,18 @@ export async function postCdaAgreement(
   if (recErr) return internalErrorResponse(requestId, recErr.message);
   if (!rec) return notFoundResponse(requestId, "cda", cdaId);
 
+  // CDA-05: "Agreement amendments require Board re-approval before taking
+  // effect." Refused BEFORE anything is written: checking after the update let
+  // an unapproved amendment un-validate the agreement and rewrite its strategy
+  // limits while the caller was told 400 (caught by the CDA partner-flow suite).
+  const amendment = body.amendment as Record<string, unknown> | undefined;
+  if (amendment && !isNonEmptyString(amendment.board_resolution_id)) {
+    return validationError(requestId, [{
+      type: "missing_field", field: "amendment.board_resolution_id",
+      message: "an amendment cannot take effect without Board re-approval",
+    }]);
+  }
+
   const supplied = (body.clauses ?? {}) as Record<string, unknown>;
   const present: Record<string, boolean> = {};
   const missing: string[] = [];
@@ -479,18 +491,8 @@ export async function postCdaAgreement(
     }, ctx);
   }
 
-  // CDA-05: "Agreement amendments require Board re-approval before taking
-  // effect." The board decision is recorded against the amendment, so an
-  // amendment supplied without a resolution is a validation failure rather
-  // than a silently unapproved change.
-  const amendment = body.amendment as Record<string, unknown> | undefined;
+  // The board decision is recorded against the amendment (validated above).
   if (amendment) {
-    if (!isNonEmptyString(amendment.board_resolution_id)) {
-      return validationError(requestId, [{
-        type: "missing_field", field: "amendment.board_resolution_id",
-        message: "an amendment cannot take effect without Board re-approval",
-      }]);
-    }
     await emit(db, scope, `ev_${cdaId}_amend`, "cda.board_decision.recorded", cdaId, {
       agreement_redline: amendment.agreement_redline ?? amendment.redline_ref ?? null,
       board_resolution_id: amendment.board_resolution_id,
@@ -1820,6 +1822,23 @@ export async function postCdaAuditCycle(
   const findings = Array.isArray(body.findings) ? body.findings : [];
   const now = new Date();
 
+  // Every finding is validated BEFORE the report is issued or any finding is
+  // written. Validating inside the write loop issued cda.audit_report.issued
+  // and persisted the earlier findings for a cycle the caller was told was
+  // refused (caught by the CDA partner-flow suite).
+  // A finding with no named owner has nobody to chase and would age silently.
+  // It is a validation failure, not a finding with a blank field.
+  const unowned = findings.findIndex((raw) => {
+    const f = raw as Record<string, unknown>;
+    return !isNonEmptyString(f.summary) || !isNonEmptyString(f.remediation_owner);
+  });
+  if (unowned >= 0) {
+    return validationError(requestId, [{
+      type: "missing_field", field: `findings[${unowned}].remediation_owner`,
+      message: "every finding needs a summary and a named remediation owner",
+    }]);
+  }
+
   await emit(db, scope, `ev_cdaaud_${year}`, "cda.audit_report.issued", `cdaaud_${year}`, {
     cycle_year: year, finding_count: findings.length,
   }, ctx);
@@ -1827,14 +1846,6 @@ export async function postCdaAuditCycle(
   const ids: string[] = [];
   for (const [i, raw] of findings.entries()) {
     const f = raw as Record<string, unknown>;
-    if (!isNonEmptyString(f.summary) || !isNonEmptyString(f.remediation_owner)) {
-      // A finding with no named owner has nobody to chase and would age
-      // silently. It is a validation failure, not a finding with a blank field.
-      return validationError(requestId, [{
-        type: "missing_field", field: `findings[${i}].remediation_owner`,
-        message: "every finding needs a summary and a named remediation owner",
-      }]);
-    }
     const id = `cdafind_${year}_${i}`;
     const { error } = await db.schema(scope).from("cda_audit_finding").upsert({
       id, cycle_year: year, summary: f.summary, remediation_owner: f.remediation_owner,

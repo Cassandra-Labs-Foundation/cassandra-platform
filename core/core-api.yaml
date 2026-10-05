@@ -2234,6 +2234,7 @@ paths:
           description: Success. Response contract not yet authored — the handler is the contract; see x-handler.
         4XX:
           description: Validation, authorization, or not-found per the standard error envelope.
+      x-route: hand
       x-audience: internal
       x-handler: complaints.postProvisionalCredit
       x-tier: write

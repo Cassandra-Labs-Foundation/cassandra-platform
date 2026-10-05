@@ -6,10 +6,11 @@
 
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type PartnerContext } from "./auth.ts";
+import { type BlnkConfig, BlnkError, getBalance, recordTransaction } from "../_shared/blnk.ts";
 import { type EvidenceScope, provenanceFor } from "./bsa.ts";
 import {
-  apiError, internalErrorResponse, isNonEmptyString, jsonResponse, notFoundResponse,
-  parseJsonBody, validationError, type ValidationErrorItem,
+  apiError, bankErrorResponse, internalErrorResponse, isNonEmptyString, jsonResponse,
+  notFoundResponse, parseJsonBody, validationError, type ValidationErrorItem,
 } from "./lib.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -359,7 +360,7 @@ export async function postDispute(
 
 /** POST /disputes/:id/provisional-credit {amount_cents?} */
 export async function postProvisionalCredit(
-  req: Request, disputeId: string, db: SupabaseClient, requestId: string,
+  req: Request, disputeId: string, db: SupabaseClient, cfg: BlnkConfig, requestId: string,
   ctx: PartnerContext, scope: EvidenceScope = "core",
 ): Promise<Response> {
   const denied = requireInternalActor(ctx, requestId);
@@ -367,7 +368,7 @@ export async function postProvisionalCredit(
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
   const { data: d } = await db.schema(scope).from("dispute")
-    .select("id, amount_cents, provisional_credit_due_at, investigation_completed_at")
+    .select("id, account_id, amount_cents, provisional_credit_due_at, investigation_completed_at")
     .eq("id", disputeId).maybeSingle();
   if (!d) return notFoundResponse(requestId, "dispute", disputeId);
 
@@ -376,6 +377,45 @@ export async function postProvisionalCredit(
   // Posting it anyway is harmless; refusing to record why it was not posted is
   // not, so the skip is its own event.
   const amount = typeof body.amount_cents === "number" ? body.amount_cents : Number(d.amount_cents);
+
+  // MP-04 / Reg E 1005.11(c)(2): the credit is POSTED TO THE ACCOUNT, i.e. the
+  // member can spend it. This handler used to record provisional_credit_cents
+  // and a "posted" event while the ledger never moved (caught by the
+  // complaints partner-flow suite). The ledger move comes first, under a
+  // deterministic reference so a retry dedupes instead of crediting twice.
+  if (scope === "core") {
+    if (!isNonEmptyString(d.account_id)) {
+      return validationError(requestId, [{
+        type: "missing_field", field: "account_id",
+        message: "this dispute names no account, so there is nothing to credit provisionally",
+      }]);
+    }
+    const { data: acct } = await db.schema("core").from("account")
+      .select("id, blnk_balance_id").eq("id", d.account_id).maybeSingle();
+    if (!acct?.blnk_balance_id) return notFoundResponse(requestId, "account", String(d.account_id));
+    try {
+      await recordTransaction(cfg, {
+        coreResource: { table: "dispute", id: disputeId },
+        leg: "provisional_credit",
+        amountCents: amount,
+        currency: "USD",
+        source: "@ProvisionalCredit",
+        destination: acct.blnk_balance_id,
+        description: `Reg E provisional credit for dispute ${disputeId}`,
+        allowOverdraft: true,
+      });
+      const bal = await getBalance(cfg, acct.blnk_balance_id);
+      if (typeof bal.balance === "number") {
+        await db.schema("core").from("account")
+          .update({ balance: bal.balance, balance_synced_at: new Date().toISOString() })
+          .eq("id", acct.id);
+      }
+    } catch (e) {
+      if (e instanceof BlnkError) return bankErrorResponse(requestId);
+      throw e;
+    }
+  }
+
   const { error } = await db.schema(scope).from("dispute").update({
     provisional_credit_posted_at: now.toISOString(),
     provisional_credit_cents: amount, updated_at: now.toISOString(),

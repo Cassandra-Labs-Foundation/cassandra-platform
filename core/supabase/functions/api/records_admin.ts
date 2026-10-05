@@ -12,7 +12,7 @@ import { type PartnerContext } from "./auth.ts";
 import { type EvidenceScope, provenanceFor } from "./bsa.ts";
 import {
   apiError, internalErrorResponse, isNonEmptyString, jsonResponse, notFoundResponse,
-  parseJsonBody, validationError, type ValidationErrorItem,
+  parseJsonBody, selectAll, validationError, type ValidationErrorItem,
 } from "./lib.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -464,17 +464,19 @@ export async function postDestructionLogReconcile(
   if (denied) return denied;
 
   const now = new Date();
-  const { data: boxes } = await db.schema(scope).from("storage_box")
-    .select("id, label, record_ids, destroyed_at");
-  const { data: records } = await db.schema(scope).from("record")
-    .select("id, disposed_at, record_class");
+  // Whole registers, not PostgREST's silent first 1000 rows: with ~2,700
+  // records a freshly disposed box was never even looked at, so the control
+  // reported no mismatch for exactly the failure it exists to catch (caught by
+  // the records-admin partner-flow suite).
+  const boxes = await selectAll<Any>(db, scope, "storage_box", "id, label, record_ids, destroyed_at");
+  const records = await selectAll<Any>(db, scope, "record", "id, disposed_at, record_class");
   const disposed = new Set(
     (records ?? []).filter((r: Any) => r.disposed_at).map((r: Any) => String(r.id)),
   );
 
   const mismatches: string[] = [];
   for (const b of boxes ?? []) {
-    const ids = (Array.isArray(b.record_ids) ? b.record_ids : []).map(String);
+    const ids: string[] = (Array.isArray(b.record_ids) ? b.record_ids : []).map(String);
     const live = ids.filter((i) => !disposed.has(i));
     const gone = ids.filter((i) => disposed.has(i));
 
@@ -711,8 +713,11 @@ export async function postRecordsPolicyReview(
   // The count of amendments is COUNTED from the schedule, not asserted. A
   // review claiming it considered the schedule while amending nothing is the
   // rubber-stamp case RR-09 exists to make visible.
-  const { data: entries } = await db.schema(scope).from("retention_schedule_entry")
-    .select("id, version, effective_at, record_class");
+  // Every entry — an unbounded select stopped at 1000 and under-counted
+  // amendments once the schedule passed that (caught by the flow suite).
+  const entries = await selectAll<Any>(
+    db, scope, "retention_schedule_entry", "id, version, effective_at, record_class",
+  );
   const amended = (entries ?? []).filter((e: Any) => Number(e.version) > 1).length;
 
   const now = new Date();

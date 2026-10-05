@@ -307,6 +307,27 @@ export async function authenticate(
   }
 
   if (!scopeAllows(row.allowed_endpoints ?? [], row.allowed_tiers ?? [], scope)) {
+    // PR-15: a third-party connection token that oversteps its scope is
+    // suspended and revoked by THAT request, not when an operator later files
+    // the violation. recordConnectionScopeViolation documented this call site
+    // but nothing made it, so an overstepping token stayed live (caught by the
+    // privacy + isolation partner-flow suites). Connection tokens are the only
+    // ones with a core.connection row; for any other token this is a no-op.
+    // Dynamic import: privacy.ts imports this module's types.
+    if (row.id.startsWith("tok_conn_")) {
+      try {
+        const { data: conn } = await db.schema("core").from("connection")
+          .select("id").eq("token_id", row.id).maybeSingle();
+        if (conn) {
+          const { recordConnectionScopeViolation } = await import("./privacy.ts");
+          await recordConnectionScopeViolation(db, String(conn.id), `${scope.endpoint} (${scope.tier})`);
+        }
+      } catch (e) {
+        // the 403 below still refuses the request; the revoke is retried by
+        // the operator route if this failed
+        console.error(`[${requestId}] connection scope-violation revoke failed: ${e}`);
+      }
+    }
     return {
       ok: false,
       response: forbidden(
