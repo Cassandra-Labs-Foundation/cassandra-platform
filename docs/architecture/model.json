@@ -8,9 +8,9 @@
       "tech": "runGate · cross-rail daily sum",
       "intent": "Monitoring should identify activity that needs review. The entry conditions determine which movements reach this detector.",
       "behavior": "The API first totals today’s qualifying outgoing movements across four rails. If the total including this movement exceeds $25,000, it blocks and returns before the large-movement detector.",
-      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. The book-transfer handler also has a safe-mode gate before runGate. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
+      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. When safe mode (RS-03) is active it is checked first inside runGate, on every rail, so a movement it refuses never reaches the velocity cap or this detector. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 113,
+      "line": 150,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 219,
       "contract": "Reads transfer, wire_transfer, ach_transfer and card_authorization. Uses UTC day boundaries and selected statuses; it is not a rolling 24-hour window."
@@ -25,7 +25,7 @@
       "behavior": "A movement greater than $10,000 creates a passing control result and calls the alert writer. Exactly $10,000 does not match this rule.",
       "boundary": "The alert is named ctr_threshold in code. That name alone does not demonstrate that cash reporting obligations are satisfied.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 176,
+      "line": 213,
       "test": "core/verifier/flows/onboard_transfer_large_txn.test.ts",
       "testline": 60,
       "contract": "Writes control_result with decision=pass. subject_ref is the source account; entity_hash is SHA-256 of the source account ID."
@@ -40,7 +40,7 @@
       "behavior": "Records a blocking velocity result, updates the movement to its rail-specific rejection status, and returns an error.",
       "boundary": "This is a neighboring payment gate, included here because it changes this control’s reach.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 147,
+      "line": 184,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 219,
       "contract": "Returns blocked=true and velocity_limit_exceeded. Writes are awaited and errors throw."
@@ -55,9 +55,9 @@
       "behavior": "Writes the causing event, an open alert with its triage deadline, then a timer event. The same movement and alert type produce a stable alert ID.",
       "boundary": "The calendar skips weekends, but not federal holidays. Creating an alert does not itself stop the payment; later payment gates still apply.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 206,
-      "test": "bsa.test.ts",
-      "testline": 114,
+      "line": 208,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 125,
       "contract": "Ordered upserts: bsa_alert.created → bsa_alert → bsa_alert.triage.timer. Duplicate IDs are ignored. Any write error throws; these are separate writes."
     },
     "skip": {
@@ -70,7 +70,7 @@
       "behavior": "Amounts at or below $10,000 skip this detector. Subsequent structuring and other payment checks can still run.",
       "boundary": "“No alert from this rule” does not mean the movement is safe, compliant, or guaranteed to settle.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 205,
+      "line": 242,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 188,
       "contract": "Control returns to the remainder of runGate. This branch is not the end of payment processing."
@@ -85,9 +85,9 @@
       "behavior": "Partner requests receive 404. Internal actors without the required role receive 403. An already-triaged alert replays the original result.",
       "boundary": "The diagram shows authorization at this endpoint. It does not establish the integrity of every credential or identity source.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 273,
-      "test": "bsa.test.ts",
-      "testline": 406,
+      "line": 275,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 159,
       "contract": "POST /bsa/alerts/{id}/triage. Loads the alert by ID; a missing alert returns 404. Previously triaged rows are not re-decided."
     },
     "triage": {
@@ -100,9 +100,9 @@
       "behavior": "The API accepts an investigator’s resolved or escalated outcome. Resolving requires a nonempty explanation; escalation opens an investigation.",
       "boundary": "This endpoint records a human judgment. It does not determine whether the explanation is substantively adequate or automatically escalate when time expires.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 285,
-      "test": "bsa.test.ts",
-      "testline": 209,
+      "line": 287,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 169,
       "contract": "Validates outcome before writes. A resolved outcome without note returns a validation error."
     },
     "resolve": {
@@ -115,9 +115,9 @@
       "behavior": "Marks the alert triaged and closed. Attempts to emit a triage event containing the note and outcome.",
       "boundary": "The note is carried by the event, not the alert update. If event emission fails, the handler logs it and still returns success after the alert update.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 322,
-      "test": "bsa.test.ts",
-      "testline": 220,
+      "line": 324,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 339,
       "contract": "Alert patch stores triaged_at, triage_outcome and status. emitBsaEvent is inside a catch-and-log block."
     },
     "case": {
@@ -130,8 +130,8 @@
       "behavior": "Creates a case linked to the alert and carries alert details as evidence. Uses 60 days when the request says no suspect; otherwise 30. The clock starts at alert creation.",
       "boundary": "The no-suspect flag comes from the caller. Event emission failures are logged; the case insert and alert update are separate writes.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 332,
-      "test": "bsa.test.ts",
+      "line": 334,
+      "test": "core/verifier/flows/bsa.test.ts",
       "testline": 182,
       "contract": "Records opened_by=ctx.tokenId. Writes case.sar.decision.timer and case.opened events, then associates the case with the alert."
     },
@@ -145,9 +145,9 @@
       "behavior": "Requires the BSA Officer role. If opened_by is populated and matches the deciding token, refuses the decision even if the token has both roles. A missing opener is not refused by this comparison.",
       "boundary": "The handler compares token IDs. Confirm how credentials map to people before treating this as proof that two different people acted.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 417,
-      "test": "bsa.test.ts",
-      "testline": 442,
+      "line": 419,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 244,
       "contract": "Same opener token returns HTTP 409 segregation_of_duties. A decided case replays its result; another closed case is rejected."
     },
     "decision": {
@@ -160,9 +160,9 @@
       "behavior": "Accepts the officer’s decision and rationale, closes the case, and records the deciding actor and any supplied concurrence list.",
       "boundary": "Committee concurrence is recorded, but quorum and composition are not enforced in this handler. Board reporting is not established by this traced path.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 429,
-      "test": "bsa.test.ts",
-      "testline": 486,
+      "line": 431,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 378,
       "contract": "concurred_by defaults to an empty list. Lateness is computed from sar_decision_due_at and included in the response and decision-event payload."
     },
     "file": {
@@ -175,9 +175,9 @@
       "behavior": "The handler attempts to emit investigation-complete and sar.filed events, then starts the SAR retention workflow.",
       "boundary": "The event name is not proof of external SAR submission. This function records a decision; external filing is outside this trace. Event or retention failures are logged without failing the saved decision.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 500,
-      "test": "bsa.test.ts",
-      "testline": 253,
+      "line": 502,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 269,
       "contract": "Case update precedes events. The file branch calls startRetentionFor(db, \"sar\", caseId, …)."
     },
     "nofile": {
@@ -190,9 +190,9 @@
       "behavior": "Stores the rationale on the case and attempts to emit investigation-complete and no-file decision events.",
       "boundary": "This branch does not call the SAR-specific retention helper. That alone does not establish whether other retention rules cover the case.",
       "file": "core/supabase/functions/api/bsa.ts",
-      "line": 500,
-      "test": "bsa.test.ts",
-      "testline": 268,
+      "line": 502,
+      "test": "core/verifier/flows/bsa.test.ts",
+      "testline": 391,
       "contract": "decision_rationale is saved with the closed case before event emission. Event failures are caught and logged."
     }
   },
@@ -424,18 +424,18 @@
     "reviewedAt": "2026-10-03",
     "method": "Manual source trace",
     "sources": {
-      "core/supabase/functions/api/transfers.ts": "99cb9aabf88b2af97f94bbdafd26e494856331b9a486160efc7d3521660c23ce",
+      "core/supabase/functions/api/transfers.ts": "4312995cf00ea675119f4be8e7747cb962ffa5f081bae0bccabe9a9a0a0a8849",
       "core/verifier/flows/transfers.test.ts": "bcb54b0985c73e8156cda76a10cf632d6461d8d594f29fb5f733188088648f8b",
       "core/verifier/flows/onboard_transfer_large_txn.test.ts": "d082613a09fa522aaba59758280a735b2adccceb18f73576914ca3a12a59b8d1",
-      "core/supabase/functions/api/bsa.ts": "7bc2ff6efd4e92dc01d62789f0df11fa950c473f01690769b6e9fefab7fab4e8",
-      "core/supabase/functions/api/bsa.test.ts": "9fd5fff0cea6f44c5222b02eb35d8529568092f83f00bc6d1a767874f8727d61",
+      "core/supabase/functions/api/bsa.ts": "b59c82e4a93c34e606b0d68423389f453151e429ee28f05c5358a42b5c5d4fdd",
+      "core/verifier/flows/bsa.test.ts": "90e8cb63c1e6311cfdf793b7c7eabdfc8607dd7ae626f0a4fbbc8f62c6b1d4f8",
       "compliance/policies/bsa/bsa.md": "86c729ae3ed00a0132d8d2044c1cdd15d1e36ebebf71840fa8239795291a1bd9",
-      "core/supabase/functions/api/index.ts": "8f3a0358ad43f2c06d2b5691ad0af37f0a8174449c61ec8e22197fd8b1f8907e",
-      "core/supabase/functions/api/auth.ts": "16592020060175d0c0e696201743ead99875834c222a8ef6a8b42a709e3b928f",
+      "core/supabase/functions/api/index.ts": "ee8ca9aed00064ab7a6fdefa636aa5fe119fbb806787053e9436ced5900132b9",
+      "core/supabase/functions/api/auth.ts": "8179a973262b4a42e69cfbf9c1748c8f1cb7a5d458d5e0e3549d5181658d4c0b",
       "core/supabase/functions/api/ach.ts": "a835b3fdf6099b982c69b457201400d101bdd165a62a1ccc35aad4f5b83a39af",
       "core/supabase/functions/api/wires.ts": "d69f149a6e09e4357da9bca6129c7b624c85c406feffd697805b31216fb290e3",
       "core/supabase/functions/api/cards.ts": "a95bec8877929ba6195a49f12b5613b5a9449d65af8577b2c01e5cb96e0030bf",
-      "core/supabase/functions/api/cda.ts": "5dccb8f7660e9cfa2c81bf206f27f72a4675dd98e97336a9eeded50a6a0c04f3",
+      "core/supabase/functions/api/cda.ts": "1b9c725c7e39949e409a3204d92fa0f3cc4084a5bd942939d746528d6f7d9e0a",
       "scripts/rebuild_artifacts.sh": "35f73afe052fef60086e626038e9a2616a11022c164277799da19adcea304d32"
     }
   }
