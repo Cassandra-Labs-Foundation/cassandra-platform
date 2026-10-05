@@ -30,3 +30,11 @@ Disposition key: `flow` (covered by a flow step), `added` (a step written to clo
 - Targets: a proposal without approval is stored unapproved with no approval event. An approved target above the latest ratio is breached and escalated when it arrives.
 - Capital documents (CP-05/06, BA-07), none of which the unit file covered: kind validation, review-before-presentation 409, prepare → present → review, stress-report and ICAAP events, and the prior-document link. **DEFECTs:** a `cfo` token cannot be minted, and a token without the cfo role can file the capital plan.
 - Fixture discipline: positions are dated in the 1900s so none can become the institution's latest position. The flow deletes them at the end so the sweep's 200-row window never fills.
+
+### Added 2026-10-05 (stub tests Phase 4 wrote alongside its fixes)
+
+| test | disposition | where |
+|---|---|---|
+| an insolvent position records the ratio the DB constraint computes (truncated toward zero) | flow | `capital.test.ts` → "an insolvent quarter (negative net worth) is still recorded — critically undercapitalized" (−2.47bp posts 201 only if the ratio truncates like the DB check) |
+| a restatement of a still-undercapitalized quarter keeps the first NWRP deadline | added | `capital.test.ts` → "restating a still-undercapitalized quarter keeps the FIRST NWRP deadline" |
+| CP-05: only a cfo token files the capital plan | flow | `capital.test.ts` → "CP-05: only the CFO prepares the capital plan — a token without the cfo role is refused" |

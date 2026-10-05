@@ -181,6 +181,19 @@ flow("capital: CFO records the quarter → PCA band applied → undercapitalized
       assertEq(new Date(ev.get("capital.pca_mandatory_actions")![0].payload?.nwrp_due_at).getTime(), new Date(p.nwrp_due_at).getTime(), "mandatory-actions event carries the deadline");
     });
 
+    await t.step("restating a still-undercapitalized quarter keeps the FIRST NWRP deadline", async () => {
+      // Regression guard (fixed 2026-10-04, Phase 4): re-posting a position
+      // restarted the 45-day restoration-plan clock, so restating a quarter
+      // bought the institution more time.
+      const first = await positionRow(under);
+      await new Promise((r) => setTimeout(r, 1500));
+      const r = await postPosition(cfo, { as_of_date: first.as_of_date, net_worth_cents: 550_000_000 });
+      assertEq(r.status, 201, `restate (${body(r)})`);
+      const p = await positionRow(under);
+      assertEq(p.pca_category, "undercapitalized", "still undercapitalized");
+      assertEq(new Date(p.nwrp_due_at).getTime(), new Date(first.nwrp_due_at).getTime(), "the deadline did not move");
+    });
+
     await t.step("the deeper bands: 3.99999% → significantly, 1.99999% → critically undercapitalized", async () => {
       for (const [nw, bp, band] of [[399_999_999, 399, "significantly_undercapitalized"], [199_999_999, 199, "critically_undercapitalized"]] as const) {
         const date = await freshPositionDate();
@@ -196,9 +209,9 @@ flow("capital: CFO records the quarter → PCA band applied → undercapitalized
     });
 
     await t.step("an insolvent quarter (negative net worth) is still recorded — critically undercapitalized", async () => {
-      // DEFECT: capital.ts floors the ratio (-2.47bp → -3) but the DB check
-      // ck_capital_ratio_matches_components uses integer division, which
-      // truncates toward zero (-2): every non-exact negative net worth is a 500.
+      // Regression guard (fixed 2026-10-04, Phase 4): capital.ts floored the
+      // ratio (-2.47bp → -3) while the DB check truncates toward zero (-2), so
+      // every non-exact negative net worth was a 500.
       const date = await freshPositionDate();
       created.push(posId(date));
       const r = await postPosition(cfo, { as_of_date: date, net_worth_cents: -2_469_135, total_assets_cents: 10_000_000_000 });

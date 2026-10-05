@@ -39,3 +39,11 @@ Disposition key: `flow` (covered by a flow step), `added` (a step written to clo
   - Every comms call rewrites `comms_initial_issued_at`, the refused media request included.
   - A PIR for a nonexistent incident is stored and returns 201.
 - **Shared-state discipline:** the flows snapshot the active risk-weight schedule and the comms tree singleton and write them back exactly in a `finally`. Any schedule version a flow adds is removed.
+
+### Added 2026-10-05 (stub tests Phase 4 wrote alongside its fixes)
+
+| test | disposition | where |
+|---|---|---|
+| BC-13: a PIR for an incident nobody declared is 404, and nothing is stored | flow | `basel.test.ts` → "BC-13: a PIR with no root cause is refused; a PIR for a nonexistent incident is 404" |
+| BC-11: comms on an unknown incident is 404; the initial issuance is the FIRST one | flow | `basel.test.ts` → "comms for an incident that does not exist is 404, not a silent success" + "initial comms go out on the PRIMARY …" |
+| BA-04: a third version numbers past the superseded ones and never overwrites | flow | `basel.test.ts` → "BA-04: with the authority the change is a NEW version …" (asserts max+1 against the live version history, which already holds many superseded versions) |
