@@ -40,6 +40,8 @@ import {
 // deno-lint-ignore no-explicit-any
 type Any = any;
 const CTX = OPS_CTX;
+/** sanctions decisions need bsa_officer or cco (decided 2026-10-05) */
+const OFFICER_CTX = { ...OPS_CTX, roles: ["bsa_officer" as const] };
 const codes = (rows: Record<string, Any[]>) =>
   (rows["core.event"] ?? []).map((e) => String(e.code));
 
@@ -92,12 +94,12 @@ Deno.test("BSA-05: releasing a hold needs a named releaser AND a determination",
   );
   const id = "ofacs_ach_counterparty_c1";
   assertEquals(
-    (await postOfacRelease(req({ released_by: "o" }), id, dbx.client, "t", CTX)).status, 400,
+    (await postOfacRelease(req({ released_by: "o" }), id, dbx.client, "t", OFFICER_CTX)).status, 400,
   );
   assertEquals(dbx.rows["core.ofac_screen"][0].hold_released_at, null);
   assertEquals(
     (await postOfacRelease(
-      req({ released_by: "o", determination: "false positive" }), id, dbx.client, "t", CTX,
+      req({ released_by: "o", determination: "false positive" }), id, dbx.client, "t", OFFICER_CTX,
     )).status,
     200,
   );
@@ -162,7 +164,7 @@ Deno.test("BSA-17: a senior-approval category cannot be completed without sign-o
   assertEquals(dbx.rows["core.edd_profile"][0].completed_at, null);
   assertEquals(
     (await postEddCompletion(
-      req({ findings: "Wolfsberg on file", approved_by: "officer" }), id, dbx.client, "t", CTX,
+      req({ findings: "Wolfsberg on file", approved_by: "officer" }), id, dbx.client, "t", OFFICER_CTX,
     )).status,
     200,
   );

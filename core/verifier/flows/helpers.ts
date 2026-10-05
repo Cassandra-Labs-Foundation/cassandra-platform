@@ -40,7 +40,7 @@ export function core() {
 // flow ends. Only the sha256 is stored, as with scripts/issue-token.ts.
 
 export type ActorType = "partner" | "cu_admin" | "pynthia_ops";
-export type BsaRole = "bsa_investigator" | "bsa_officer" | "bsa_compliance" | "bsa_counsel";
+export type BsaRole = "bsa_investigator" | "bsa_officer" | "bsa_compliance" | "bsa_counsel" | "cco" | "cfo";
 
 const minted: string[] = [];
 

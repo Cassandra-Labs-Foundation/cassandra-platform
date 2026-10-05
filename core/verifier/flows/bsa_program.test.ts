@@ -217,7 +217,7 @@ flow("bsa_program: an applicant hits OFAC at CIP — denied, held, escalated, an
   });
 
   await t.step("staff without the BSA officer role cannot release an OFAC hold (403)", async () => {
-    // DEFECT: postOfacRelease gates only on requireInternalActor (bsa_program.ts ~L143) — any cu_admin/ops token with no BSA role can lift an OFAC hold; bsa.ts gates the comparable SAR decision on bsa_officer
+    // Regression guard (fixed 2026-10-05): releasing a hold takes bsa_officer or cco.
     // Its own hold (an ACH counterparty), so a wrongful release cannot disturb the applicant's.
     const cp = `achcp_${uid()}`;
     const other = `ofacs_ach_counterparty_${cp}`;
@@ -228,6 +228,12 @@ flow("bsa_program: an applicant hits OFAC at CIP — denied, held, escalated, an
       { released_by: "front desk", determination: "customer says it is not them" }, { key: clerk });
     assertEq(r.status, 403, `role-less staff refused (${show(r.body)})`);
     assertEq((await rowById("ofac_screen", other)).hold_released_at, null, "hold intact");
+    // the Chief Compliance Officer holds the same authority as the BSA Officer
+    const cco = await actor("cu_admin", ["cco"]);
+    const ok = await api("POST", `/bsa/ofac/screens/${other}/release`,
+      { released_by: "Chief Compliance Officer", determination: "false positive — different entity, registration differs" }, { key: cco });
+    assertEq(ok.status, 200, `the CCO releases (${show(ok.body)})`);
+    assert((await rowById("ofac_screen", other)).hold_released_at, "released by the CCO");
   });
 
   await t.step("the officer releases with a documented false-positive determination", async () => {
@@ -443,7 +449,8 @@ flow("bsa_program: a PEP hit opens senior-approval EDD in the same act; only the
   });
 
   await t.step("the analyst cannot supply the sign-off by typing a name — it takes the officer's credential", async () => {
-    // DEFECT: postEddCompletion accepts any non-empty approved_by string from any internal token (bsa_program.ts ~L241-247); senior approval is self-asserted, never bound to a bsa_officer actor
+    // Regression guard (fixed 2026-10-05): senior sign-off takes bsa_officer or
+    // cco, and approver_id is the signing credential, not a typed name.
     // A second PEP EDD (opened directly on the other member), so a wrongful completion cannot disturb the first.
     const id = eddOf(ordinary.entity);
     const o = await api("POST", "/bsa/edd",
@@ -454,6 +461,14 @@ flow("bsa_program: a PEP hit opens senior-approval EDD in the same act; only the
       { findings: "source of wealth documented", approved_by: "BSA Officer" }, { key: analyst });
     assertEq(r.status, 403, `the analyst is refused (${show(r.body)})`);
     assertEq((await rowById("edd_profile", id)).completed_at, null, "still open");
+    const cco = await actor("cu_admin", ["cco"]);
+    const ok = await api("POST", `/bsa/edd/${id}/complete`,
+      { findings: "source of wealth documented; appointment confirmed", approved_by: "Chief Compliance Officer" }, { key: cco });
+    assertEq(ok.status, 200, `the CCO signs off (${show(ok.body)})`);
+    const done = await rowById("edd_profile", id);
+    assert(done.completed_at, "completed");
+    assertEq(done.approver_id, `tok_test_cu_admin_${cco.slice("cass_test_".length, "cass_test_".length + 12)}`,
+      "the approver is the signing credential, not the typed name");
   });
 
   await t.step("a screen with no name is 400", async () => {

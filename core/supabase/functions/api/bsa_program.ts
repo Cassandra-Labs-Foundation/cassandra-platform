@@ -6,7 +6,7 @@
 // Green here means the plumbing works, not that anything would be detected.
 
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { type PartnerContext } from "./auth.ts";
+import { type BsaRole, type PartnerContext } from "./auth.ts";
 import { type EvidenceScope, provenanceFor, raiseAlert } from "./bsa.ts";
 import {
   apiError, internalErrorResponse, isNonEmptyString, isUuid, jsonResponse, notFoundResponse,
@@ -162,12 +162,35 @@ export async function postOfacScreen(
   });
 }
 
+/**
+ * Sanctions decisions — releasing an OFAC hold, signing off a PEP or
+ * correspondent EDD — belong to the BSA Officer or the Chief Compliance
+ * Officer (decided 2026-10-05). Both used to accept any staff token, with the
+ * approver merely TYPED into the body (caught by the bsa_program flows).
+ * Call AFTER requireInternalActor (partners keep the route's 404 — and the
+ * route-gating check looks for that call in each handler); staff without
+ * either role get 403.
+ */
+const SANCTIONS_AUTHORITY: BsaRole[] = ["bsa_officer", "cco"];
+
+function requireSanctionsRole(ctx: PartnerContext, requestId: string): Response | null {
+  if (!ctx.roles.some((r) => SANCTIONS_AUTHORITY.includes(r))) {
+    return apiError(403, "insufficient_role", requestId, {
+      title: "Insufficient Role",
+      detail: `bsa_officer or cco is required for this decision; this token carries ${
+        ctx.roles.length ? ctx.roles.join(", ") : "no such role"
+      }`,
+    });
+  }
+  return null;
+}
+
 /** POST /bsa/ofac/screens/:id/release {released_by, determination} */
 export async function postOfacRelease(
   req: Request, screenId: string, db: SupabaseClient, requestId: string,
   ctx: PartnerContext, scope: EvidenceScope = "core",
 ): Promise<Response> {
-  const denied = requireInternalActor(ctx, requestId);
+  const denied = requireInternalActor(ctx, requestId) ?? requireSanctionsRole(ctx, requestId);
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
@@ -194,6 +217,7 @@ export async function postOfacRelease(
   if (error) return internalErrorResponse(requestId, error.message);
   await emit(db, scope, `ev_${screenId}_rel`, "ofac.hold.released", "ofac_screen", screenId, {
     released_by: body.released_by, determination: body.determination,
+    released_by_token: ctx.tokenId,
   }, ctx);
   return jsonResponse({ data: { id: screenId, released: true } }, 200, requestId);
 }
@@ -269,11 +293,19 @@ export async function postEddCompletion(
     });
   }
 
+  // the sign-off itself is the officer's: an analyst typing a name is refused
+  if (e.senior_approval_required === true) {
+    const deniedSenior = requireSanctionsRole(ctx, requestId);
+    if (deniedSenior) return deniedSenior;
+  }
+
   const now = new Date();
   const { error } = await db.schema(scope).from("edd_profile").update({
     completed_at: now.toISOString(), findings: body.findings,
     approved_by: isNonEmptyString(body.approved_by) ? body.approved_by : null,
-    approver_id: isNonEmptyString(body.approved_by) ? body.approved_by : null,
+    // the credential that signed off, not a name anyone could type
+    approver_id: e.senior_approval_required === true ? ctx.tokenId
+      : isNonEmptyString(body.approved_by) ? body.approved_by : null,
     updated_at: now.toISOString(),
   }).eq("id", eddId);
   if (error) return internalErrorResponse(requestId, error.message);

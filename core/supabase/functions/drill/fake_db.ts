@@ -451,6 +451,9 @@ function matches(row: Any, preds: { op: string; col: string; val: Any }[]): bool
         if (v == null || typeof v !== "object") return false;
         return Object.entries(p.val as Record<string, Any>).every(([k, want]) => v[k] === want);
       }
+      case "not":
+        // PostgREST .not(col, op, val): the negation of one ordinary predicate
+        return !matches(row, [p.val as { op: string; col: string; val: Any }]);
       default:
         return true;
     }
@@ -491,6 +494,8 @@ export function makeDrillDb(): DrillDb {
             neq: (c: string, v: Any) => (preds.push({ op: "neq", col: c, val: v }), chain),
             is: (c: string, v: Any) => (preds.push({ op: "is", col: c, val: v }), chain),
             in: (c: string, v: Any) => (preds.push({ op: "in", col: c, val: v }), chain),
+            not: (c: string, op: string, v: Any) =>
+              (preds.push({ op: "not", col: c, val: { op, col: c, val: v } }), chain),
             lt: (c: string, v: Any) => (preds.push({ op: "lt", col: c, val: v }), chain),
             lte: (c: string, v: Any) => (preds.push({ op: "lte", col: c, val: v }), chain),
             gte: (c: string, v: Any) => (preds.push({ op: "gte", col: c, val: v }), chain),
