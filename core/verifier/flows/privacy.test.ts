@@ -755,19 +755,26 @@ flow("privacy: third-party connection — partner grants a scoped token → in-s
     assert(!JSON.stringify(ev).includes(conn.token), "no event carries the plaintext");
   });
 
-  await t.step("the token reads what it was consented to, and cannot write", async () => {
+  await t.step("the token reads what it was consented to; a write is out of scope — refused, and it revokes the connection", async () => {
     const r = await api("GET", `/entities/${entity}`, undefined, { key: conn.token });
     assertEq(r.status, 200, `in-scope read (${body(r)})`);
     assertEq(r.body.id, entity, "the member");
     const w = await api("POST", "/entities", { type: "person", name: personaName(), date_of_birth: "1990-01-01" }, { key: conn.token });
     assertEq(w.status, 403, `write with a read-only connection (${body(w)})`);
+    // PR-15: ANY use beyond the consented scope suspends the connection in
+    // real time — a write by a read-only connection included
+    assertEq((await row("connection", conn.id))?.status, "revoked", "the write revoked the connection");
+    const after = await api("GET", `/entities/${entity}`, undefined, { key: conn.token });
+    assertEq(after.status, 401, `the revoked token no longer reads (${body(after)})`);
   });
 
-  await t.step("an out-of-scope request is refused AND revokes the connection in real time", async () => {
+  await t.step("an out-of-scope read is refused AND revokes the connection in real time", async () => {
+    // a fresh connection: the previous one was revoked by its write attempt
+    conn = await connect();
     const acct = await api("GET", "/accounts", undefined, { key: conn.token });
     assertEq(acct.status, 403, `out of scope (${body(acct)})`);
     assertEq(acct.body.type, "insufficient_scope", "typed refusal");
-    // DEFECT: the router's insufficient_scope path never calls recordConnectionScopeViolation (privacy.ts:1249 claims it does); PR-15 requires immediate suspension
+    // Regression guard (fixed 2026-10-04, Phase 3): the insufficient_scope path now revokes connection tokens.
     const c = await row("connection", conn.id);
     assertEq(c?.status, "revoked", "scope violation revoked the connection");
     assertEq((await row("api_token", conn.token_id))?.status, "revoked", "and its token");

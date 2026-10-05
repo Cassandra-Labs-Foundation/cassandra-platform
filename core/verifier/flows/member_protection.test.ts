@@ -202,7 +202,10 @@ flow("member_protection: death reported from a certificate → every account loc
     assertEq(ev.payload["account.balance"], CHECKING + SAVINGS, "event records the ledger balance");
     assertEq(ev.payload["member.amounts_owed"], OWED, "event records the amounts owed");
     assertEq(ev.payload["verification.status"], "approved", "event records the verified claimant");
-    assertEq(Number((await rowById("account", checking)).balance), CHECKING, "authoritative read refreshed the mirror");
+    // the poisoned mirror was overwritten from the ledger; since the payout now
+    // really moves money, the refreshed value is the post-payout balance
+    const mirrored = Number((await rowById("account", checking)).balance) + Number((await rowById("account", savings)).balance);
+    assertEq(mirrored, OWED, "the mirrors were refreshed from the ledger, and only the amount owed remains");
   });
 
   await t.step("an estate is not paid twice (409)", async () => {
@@ -212,7 +215,7 @@ flow("member_protection: death reported from a certificate → every account loc
   });
 
   await t.step("the payout actually left the deceased member's accounts", async () => {
-    // DEFECT: postEstatePayout marks the claim paid and emits estate.payout.sent but posts nothing to the ledger — the member's balances are unchanged (member_protection.ts postEstatePayout).
+    // Regression guard (bug found by this flow, fixed 2026-10-05): the payout was recorded as sent while no money left the member's accounts; it now debits them in the ledger.
     const left = await balanceOf(partner, checking) + await balanceOf(partner, savings);
     assert(left <= OWED, `after paying ${CHECKING + SAVINGS - OWED} the member's accounts should hold at most the ${OWED} owed; they hold ${left}`);
   });
@@ -334,7 +337,7 @@ flow("member_protection: expulsion needs a deliverable contact → noticed → h
   });
 
   await t.step("the payout actually left the expelled member's account", async () => {
-    // DEFECT: postExpulsionClose records payout_sent_at and emits member.expulsion_payout.sent but posts nothing to the ledger — the share balance is unchanged (member_protection.ts postExpulsionClose).
+    // Regression guard (bug found by this flow, fixed 2026-10-05): the payout was recorded as sent while the share balance stayed put; it now debits the account in the ledger.
     const left = await balanceOf(partner, account);
     assert(left <= OWED, `after paying ${OPENING - OWED} the account should hold at most the ${OWED} owed; it holds ${left}`);
   });

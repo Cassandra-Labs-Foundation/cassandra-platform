@@ -13,7 +13,7 @@
 //          evidence; deactivation requires two different authorizers.
 
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { type BlnkConfig, getBalance } from "../_shared/blnk.ts";
+import { type BlnkConfig, getBalance, recordTransaction } from "../_shared/blnk.ts";
 import { type PartnerContext } from "./auth.ts";
 import { type EvidenceScope, provenanceFor } from "./bsa.ts";
 import {
@@ -39,6 +39,8 @@ async function emit(
 interface MemberBalance {
   id: string;
   blnk_balance_id: string | null;
+  /** ledger balance as read by memberBalanceCents; 0 when unprovisioned */
+  cents?: number;
 }
 
 type BalanceSum =
@@ -88,6 +90,7 @@ async function memberBalanceCents(
       const bal = await getBalance(cfg, a.blnk_balance_id);
       if (typeof bal.balance !== "number") throw new Error("balance response missing numeric balance");
       cents += bal.balance;
+      a.cents = bal.balance;
       const { error: mirrorErr } = await db.schema(scope).from("account")
         .update({ balance: bal.balance, balance_synced_at: syncedAt }).eq("id", a.id);
       if (mirrorErr) console.error(`member balance mirror refresh (${a.id}): ${mirrorErr.message}`);
@@ -97,6 +100,58 @@ async function memberBalanceCents(
     }
   }
   return { ok: true, cents, accounts };
+}
+
+/**
+ * Move a payout OUT of the member's accounts in the ledger.
+ *
+ * Estate and expulsion payouts used to be recorded — status paid/final, an
+ * event saying "sent" — while every cent stayed in the member's accounts
+ * (caught by the member_protection partner flows; decided 2026-10-05 that a
+ * payout must actually leave). The payout is debited across the member's
+ * accounts, largest first, to the external @MemberPayouts balance; what the
+ * member owes the credit union stays behind. Called BEFORE the claim is
+ * marked paid, so a ledger failure leaves it unpaid and retryable. Each debit's
+ * reference is `account:<id>:<leg>` — one per account per claim — so a retry
+ * after a partial failure dedupes in Blnk instead of paying twice.
+ */
+async function disburse(
+  db: SupabaseClient,
+  cfg: BlnkConfig,
+  scope: EvidenceScope,
+  accounts: MemberBalance[],
+  payoutCents: number,
+  leg: string,
+  description: string,
+  requestId: string,
+): Promise<Response | null> {
+  let remaining = payoutCents;
+  const ordered = [...accounts].filter((a) => a.blnk_balance_id && (a.cents ?? 0) > 0)
+    .sort((x, y) => (y.cents ?? 0) - (x.cents ?? 0));
+  const syncedAt = new Date().toISOString();
+  for (const a of ordered) {
+    if (remaining <= 0) break;
+    const take = Math.min(a.cents ?? 0, remaining);
+    try {
+      await recordTransaction(cfg, {
+        coreResource: { table: "account", id: a.id },
+        leg,
+        amountCents: take,
+        currency: "USD",
+        source: a.blnk_balance_id!,
+        destination: "@MemberPayouts",
+        description,
+      });
+    } catch (e) {
+      console.error(`payout debit failed for account ${a.id}: ${e}`);
+      return bankErrorResponse(requestId);
+    }
+    remaining -= take;
+    const { error: mirrorErr } = await db.schema(scope).from("account")
+      .update({ balance: (a.cents ?? 0) - take, balance_synced_at: syncedAt }).eq("id", a.id);
+    if (mirrorErr) console.error(`payout mirror refresh (${a.id}): ${mirrorErr.message}`);
+  }
+  return null;
 }
 
 // ------------------------------------------------- MP-07 death and estate
@@ -235,6 +290,12 @@ export async function postEstatePayout(
   const owed = typeof body.amounts_owed_cents === "number" ? body.amounts_owed_cents : 0;
   const payout = Math.max(0, balance - owed);
 
+  const moved = await disburse(
+    db, cfg, scope, sum.accounts, payout, `estate_payout_${claimId}`,
+    `estate payout, claim ${claimId}`, requestId,
+  );
+  if (moved) return moved;
+
   const now = new Date().toISOString();
   const { error } = await db.schema(scope).from("estate_claim").update({
     status: "paid", payout_cents: payout, updated_at: now,
@@ -371,6 +432,12 @@ export async function postExpulsionClose(
   const owed = Number(ex.amounts_owed_cents ?? 0);
   const payout = Math.max(0, balance - owed);
   const now = new Date().toISOString();
+
+  const moved = await disburse(
+    db, cfg, scope, accounts, payout, `expulsion_payout_${expulsionId}`,
+    `expulsion payout, ${expulsionId}`, requestId,
+  );
+  if (moved) return moved;
 
   for (const a of accounts ?? []) {
     await db.schema(scope).from("account").update({ lock_type: "expelled" }).eq("id", a.id);
