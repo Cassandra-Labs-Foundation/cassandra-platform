@@ -9,7 +9,7 @@ import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type PartnerContext } from "./auth.ts";
 import { type EvidenceScope, provenanceFor, raiseAlert } from "./bsa.ts";
 import {
-  apiError, internalErrorResponse, isNonEmptyString, jsonResponse, notFoundResponse,
+  apiError, internalErrorResponse, isNonEmptyString, isUuid, jsonResponse, notFoundResponse,
   parseJsonBody, validationError,
 } from "./lib.ts";
 
@@ -68,6 +68,39 @@ export function ofacMatch(name: string): "clear" | "potential_match" {
 }
 
 /**
+ * Place an OFAC hold: the screen row, its hold + escalation events, and the BSA
+ * alert that routes it to adjudication. ONE implementation for every screening
+ * path — CIP and monetary-instrument sales used to write a hold with no alert
+ * (nobody was told) and, for instruments, after the sale had completed (caught
+ * by the BSA-program partner-flow suite).
+ */
+async function placeOfacHold(
+  db: SupabaseClient, scope: EvidenceScope, ctx: PartnerContext,
+  subjectKind: string, subjectRef: string, name: string, now: Date,
+): Promise<string> {
+  const id = `ofacs_${subjectKind}_${subjectRef}`;
+  const { error } = await db.schema(scope).from("ofac_screen").upsert({
+    id, subject_kind: subjectKind, subject_ref: subjectRef, screened_name: name,
+    list_version: null, verdict: "potential_match", screened_at: now.toISOString(),
+    hold_placed_at: now.toISOString(), escalated_at: now.toISOString(),
+    provenance: provenanceFor(scope, ctx),
+  }, { onConflict: "id" });
+  if (error) throw new Error(`ofac_screen hold (${id}): ${error.message}`);
+  const payload = {
+    "ofac.subject_ref": subjectRef, "ofac.screened_name": name,
+    "ofac.list_version": null, verdict: "potential_match",
+  };
+  await emit(db, scope, `ev_${id}_hold`, "ofac.hold.placed", "ofac_screen", id, payload, ctx);
+  await emit(db, scope, `ev_${id}_esc`, "ofac.escalated", "ofac_screen", id, payload, ctx);
+  await raiseAlert(db, {
+    ctx, scope, alertType: "ofac", entityHash: subjectRef,
+    causeType: subjectKind, causeId: subjectRef,
+    details: `OFAC potential match on ${name}; hold placed`,
+  });
+  return id;
+}
+
+/**
  * POST /bsa/ofac/screens {subject_kind, subject_ref, name}
  *
  * BSA-05. Writes evidence on EVERY run including clean passes — "screened and
@@ -96,36 +129,33 @@ export async function postOfacScreen(
   const now = new Date();
   const verdict = ofacMatch(String(body.name));
   const id = `ofacs_${body.subject_kind}_${body.subject_ref}`;
-  const { error } = await db.schema(scope).from("ofac_screen").upsert({
-    id, subject_kind: body.subject_kind, subject_ref: body.subject_ref,
-    screened_name: body.name,
-    // NULL, always. See the header — the screen cannot name its list.
-    list_version: null,
-    verdict, screened_at: now.toISOString(),
-    hold_placed_at: verdict === "clear" ? null : now.toISOString(),
-    escalated_at: verdict === "clear" ? null : now.toISOString(),
-    provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" });
-  if (error) return internalErrorResponse(requestId, error.message);
-
   const payload = {
     "ofac.subject_ref": body.subject_ref, "ofac.screened_name": body.name,
     "ofac.list_version": null, verdict,
   };
-  await emit(db, scope, `ev_${id}_screened`, "ofac.screened", "ofac_screen", id, payload, ctx);
 
   if (verdict === "clear") {
+    const { error } = await db.schema(scope).from("ofac_screen").upsert({
+      id, subject_kind: body.subject_kind, subject_ref: body.subject_ref,
+      screened_name: body.name,
+      // NULL, always. See the header — the screen cannot name its list.
+      list_version: null,
+      verdict, screened_at: now.toISOString(),
+      hold_placed_at: null, escalated_at: null,
+      provenance: provenanceFor(scope, ctx),
+    }, { onConflict: "id" });
+    if (error) return internalErrorResponse(requestId, error.message);
+    await emit(db, scope, `ev_${id}_screened`, "ofac.screened", "ofac_screen", id, payload, ctx);
     await emit(db, scope, `ev_${id}_clear`, "ofac.cleared", "ofac_screen", id, payload, ctx);
     return jsonResponse({ data: { id, verdict } }, 201, requestId);
   }
 
-  await emit(db, scope, `ev_${id}_hold`, "ofac.hold.placed", "ofac_screen", id, payload, ctx);
-  await emit(db, scope, `ev_${id}_esc`, "ofac.escalated", "ofac_screen", id, payload, ctx);
-  await raiseAlert(db, {
-    ctx, scope, alertType: "ofac", entityHash: String(body.subject_ref),
-    causeType: String(body.subject_kind), causeId: String(body.subject_ref),
-    details: `OFAC potential match on ${body.name}; hold placed`,
-  });
+  try {
+    await placeOfacHold(db, scope, ctx, String(body.subject_kind), String(body.subject_ref), String(body.name), now);
+  } catch (e) {
+    return internalErrorResponse(requestId, e instanceof Error ? e.message : String(e));
+  }
+  await emit(db, scope, `ev_${id}_screened`, "ofac.screened", "ofac_screen", id, payload, ctx);
   return apiError(409, "ofac_hold", requestId, {
     title: "OFAC hold placed",
     detail: `potential match on '${body.name}'; the subject is blocked pending review`,
@@ -390,6 +420,21 @@ export async function postMonetaryInstrument(
   }
 
   const now = new Date();
+  // BSA-05: screened pre-execution, like every payment party. A hit refuses
+  // the sale — screening after the row was written sold the instrument and
+  // left only an event behind.
+  if (ofacMatch(String(body.purchaser_name)) !== "clear") {
+    const ref = isNonEmptyString(body.purchaser_ref) ? body.purchaser_ref : String(body.purchaser_name);
+    try {
+      await placeOfacHold(db, scope, ctx, "monetary_instrument", ref, String(body.purchaser_name), now);
+    } catch (e) {
+      return internalErrorResponse(requestId, e instanceof Error ? e.message : String(e));
+    }
+    return apiError(409, "ofac_hold", requestId, {
+      title: "OFAC hold placed",
+      detail: `potential match on '${body.purchaser_name}'; the sale is refused pending review`,
+    });
+  }
   const id = `mi_${crypto.randomUUID()}`;
   const { error } = await db.schema(scope).from("monetary_instrument").upsert({
     id, instrument_type: body.instrument_type, amount_cents: amount,
@@ -432,11 +477,11 @@ export async function postMonetaryInstrument(
         "monetary_instrument.amount": amount, ctr_required: true,
       }, ctx);
   }
-  // BSA-05: the purchaser of a reportable instrument is screened.
-  if (logRequired && isNonEmptyString(body.purchaser_name)) {
-    const verdict = ofacMatch(String(body.purchaser_name));
-    await emit(db, scope, `ev_${id}_ofac`, verdict === "clear" ? "ofac.cleared" : "ofac.hold.placed",
-      "monetary_instrument", id, { verdict, "ofac.list_version": null }, ctx);
+  // BSA-05: the purchaser was screened above; a reportable sale records that
+  // it cleared (a hit never reaches this point).
+  if (logRequired) {
+    await emit(db, scope, `ev_${id}_ofac`, "ofac.cleared",
+      "monetary_instrument", id, { verdict: "clear", "ofac.list_version": null }, ctx);
   }
   return jsonResponse({ data: { id, log_required: logRequired } }, 201, requestId);
 }
@@ -810,17 +855,27 @@ export async function postCipVerification(
   // The four CIP elements are stored on the ENTITY. Holding them only on the
   // verification would mean the member record cannot answer "who is this",
   // which is what every downstream control asks of it.
-  await db.schema(scope).from("entity").upsert({
-    id: String(body.entity_ref), type: "person", name: body.name,
-    date_of_birth: isNonEmptyString(body.dob) ? body.dob : null,
-    address: body.address ?? null,
-    tin: isNonEmptyString(body.tin) ? body.tin : null,
-    // no provenance: core.entity predates the column (evidence tables carry
-    // it; the member record does not) — stamping it made the live schema
-    // refuse the whole CIP upsert. partner_id IS on the member record and is
-    // NOT NULL — its absence was the next refusal in line.
-    status: "pending", partner_id: ctx.ownerPartnerId,
-  }, { onConflict: "id" });
+  // Only the elements SUPPLIED are written, and an existing member keeps its
+  // status and owner: an upsert of every field (missing ones as null) let a
+  // denied CIP wipe the member's date of birth and reset them to pending
+  // (caught by the BSA-program partner-flow suite).
+  const supplied: Record<string, unknown> = { name: body.name };
+  if (isNonEmptyString(body.dob)) supplied.date_of_birth = body.dob;
+  if (body.address != null) supplied.address = body.address;
+  if (isNonEmptyString(body.tin)) supplied.tin = body.tin;
+  const { data: existingEntity, error: entSelErr } = await db.schema(scope).from("entity")
+    .select("id").eq("id", String(body.entity_ref)).maybeSingle();
+  if (entSelErr) return internalErrorResponse(requestId, entSelErr.message);
+  const { error: entErr } = existingEntity
+    ? await db.schema(scope).from("entity").update(supplied).eq("id", String(body.entity_ref))
+    : await db.schema(scope).from("entity").insert({
+      id: String(body.entity_ref), type: "person", ...supplied,
+      // no provenance: core.entity predates the column (evidence tables carry
+      // it; the member record does not). partner_id IS on the member record
+      // and is NOT NULL.
+      status: "pending", partner_id: ctx.ownerPartnerId,
+    });
+  if (entErr) return internalErrorResponse(requestId, entErr.message);
   const elements = {
     name: isNonEmptyString(body.name),
     dob: isNonEmptyString(body.dob),
@@ -835,14 +890,20 @@ export async function postCipVerification(
 
   // the OFAC screen is part of CIP, not a separate step someone might skip
   const verdict = ofacMatch(String(body.name));
-  await db.schema(scope).from("ofac_screen").upsert({
-    id: `ofacs_entity_${body.entity_ref}`, subject_kind: "entity",
-    subject_ref: body.entity_ref, screened_name: body.name, list_version: null,
-    verdict, screened_at: now.toISOString(),
-    hold_placed_at: verdict === "clear" ? null : now.toISOString(),
-    escalated_at: verdict === "clear" ? null : now.toISOString(),
-    provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" });
+  if (verdict === "clear") {
+    await db.schema(scope).from("ofac_screen").upsert({
+      id: `ofacs_entity_${body.entity_ref}`, subject_kind: "entity",
+      subject_ref: body.entity_ref, screened_name: body.name, list_version: null,
+      verdict, screened_at: now.toISOString(), hold_placed_at: null, escalated_at: null,
+      provenance: provenanceFor(scope, ctx),
+    }, { onConflict: "id" });
+  } else {
+    try {
+      await placeOfacHold(db, scope, ctx, "entity", String(body.entity_ref), String(body.name), now);
+    } catch (e) {
+      return internalErrorResponse(requestId, e instanceof Error ? e.message : String(e));
+    }
+  }
   await emit(db, scope, `ev_${id}_ofac`,
     verdict === "clear" ? "ofac.cleared" : "ofac.hold.placed", "verification", id, {
       verdict, "ofac.list_version": null,
@@ -931,12 +992,28 @@ export async function postTravelRuleRecord(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
-  const amount = typeof body.amount_cents === "number" ? body.amount_cents : NaN;
-  if (!isNonEmptyString(body.wire_ref) || !Number.isFinite(amount)) {
+  const claimed = typeof body.amount_cents === "number" ? body.amount_cents : NaN;
+  if (!isNonEmptyString(body.wire_ref) || !Number.isFinite(claimed)) {
     return validationError(requestId, [{
       type: "missing_field", field: "wire_ref",
       message: "wire_ref and amount_cents are required",
     }]);
+  }
+  // The record attaches to a REAL wire at its REAL amount. Trusting the
+  // caller's figure let $2,999 be claimed on a $5,000 wire to skip the
+  // originator requirement, and kept records for wires that never existed
+  // (caught by the BSA-program partner-flow suite).
+  if (!isUuid(String(body.wire_ref))) return notFoundResponse(requestId, "wire_transfer", String(body.wire_ref));
+  const { data: wire, error: wireErr } = await db.schema(scope).from("wire_transfer")
+    .select("id, amount").eq("id", String(body.wire_ref)).maybeSingle();
+  if (wireErr) return internalErrorResponse(requestId, wireErr.message);
+  if (!wire) return notFoundResponse(requestId, "wire_transfer", String(body.wire_ref));
+  const amount = Number((wire as Any).amount);
+  if (claimed !== amount) {
+    return apiError(409, "travel_rule_amount_mismatch", requestId, {
+      title: "Amount does not match the wire",
+      detail: `wire ${body.wire_ref} is for ${amount}; the record claimed ${claimed}`,
+    });
   }
   const attaches = amount >= TRAVEL_RULE_FLOOR_CENTS;
   const orig = (body.originator ?? null) as Record<string, unknown> | null;
@@ -1043,6 +1120,13 @@ export async function postSarLifecycle(
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
+  // The case must exist: timers, continuing filings and disclosure refusals
+  // were recorded against any id at all (caught by the BSA-program flow suite).
+  const { data: sarCase, error: caseErr } = await db.schema(scope).from("case")
+    .select("id").eq("id", caseId).maybeSingle();
+  if (caseErr) return internalErrorResponse(requestId, caseErr.message);
+  if (!sarCase) return notFoundResponse(requestId, "case", caseId);
+
   const now = new Date();
   const stage = String(body.stage ?? "timer");
 
@@ -1135,11 +1219,23 @@ export async function postOfacAnnualReport(
       message: "reporting_year and filed_by are required",
     }]);
   }
-  // The counts are COUNTED from the screen register, not supplied.
-  const { data: screens } = await db.schema(scope).from("ofac_screen")
-    .select("id, verdict, hold_placed_at, hold_released_at");
-  const held = (screens ?? []).filter((s: Any) => s.hold_placed_at && !s.hold_released_at);
-  const rejected = (screens ?? []).filter((s: Any) => s.hold_released_at);
+  // The counts are COUNTED from the screen register, not supplied — and for
+  // THIS reporting year: property blocked as of June 30 (31 CFR 501.603), and
+  // holds released during the year. Counting the whole register put every
+  // hold ever placed into every year's report (caught by the flow suite).
+  const asOf = new Date(Date.UTC(year, 5, 30, 23, 59, 59, 999));
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
+  const { data: screens, error: scrErr } = await db.schema(scope).from("ofac_screen")
+    .select("id, verdict, hold_placed_at, hold_released_at")
+    // `lt` also drops rows with no hold (NULL never compares)
+    .lt("hold_placed_at", yearEnd.toISOString());
+  if (scrErr) return internalErrorResponse(requestId, scrErr.message);
+  const at = (v: unknown) => new Date(String(v));
+  const held = (screens ?? []).filter((s: Any) =>
+    at(s.hold_placed_at) <= asOf && (!s.hold_released_at || at(s.hold_released_at) > asOf));
+  const rejected = (screens ?? []).filter((s: Any) =>
+    s.hold_released_at && at(s.hold_released_at) >= yearStart && at(s.hold_released_at) < yearEnd);
 
   const id = `ofacann_${year}`;
   await emit(db, scope, `ev_${id}_blocked`, "ofac.blocked", "ofac_screen", id, {

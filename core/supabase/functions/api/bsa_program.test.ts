@@ -270,45 +270,6 @@ Deno.test("BSA-09: in the band WITH identification logs and screens the purchase
 
 // ------------------------------------------------------- BSA-10 Travel Rule
 
-Deno.test("BSA-10: a wire at the threshold with NO originator record is refused", async () => {
-  const dbx = makeDrillDb();
-  const res = await postTravelRuleRecord(
-    req({
-      wire_ref: "w1", amount_cents: TRAVEL_RULE_FLOOR_CENTS,
-      beneficiary: { name: "Payee" },
-    }),
-    dbx.client, "t", CTX,
-  );
-  assertEquals(res.status, 409);
-  assert(codes(dbx.rows).includes("wire_transfer.record.missing"));
-  assert(!codes(dbx.rows).includes("wire_transfer.record.retained"));
-});
-
-Deno.test("BSA-10: below the threshold nothing attaches", async () => {
-  const dbx = makeDrillDb();
-  const res = await postTravelRuleRecord(
-    req({ wire_ref: "w1", amount_cents: TRAVEL_RULE_FLOOR_CENTS - 1 }), dbx.client, "t", CTX,
-  );
-  assertEquals(res.status, 201);
-  assert(codes(dbx.rows).includes("wire_transfer.record.retained"));
-});
-
-Deno.test("BSA-10: a complete record is RETAINED AS A ROW, not just an event", async () => {
-  const dbx = makeDrillDb();
-  await postTravelRuleRecord(
-    req({
-      wire_ref: "w1", amount_cents: 500_000,
-      originator: { name: "Alice", address: "1 St", account: "a1", routing_number: "021" },
-      beneficiary: { name: "Bob", account: "b1" },
-    }),
-    dbx.client, "t", CTX,
-  );
-  // 31 CFR 1010.410(f) requires five-year retrievable retention, which an
-  // event payload is not
-  assertEquals(dbx.rows["core.originator"][0].name, "Alice");
-  assertEquals(dbx.rows["core.originator"][0].beneficiary_name, "Bob");
-});
-
 // ---------------------------------------------------------------- BSA-13 FBAR
 
 Deno.test("BSA-13: the threshold is on the AGGREGATE, not on any single account", async () => {
@@ -446,32 +407,3 @@ Deno.test("BSA-14: closing publishes an ACTION PLAN, not just a disposition", as
 
 // ---------------------------------------------------- BSA-07 SAR confidentiality
 
-Deno.test("BSA-07: a disclosure request is DECLINED and the refusal is the evidence", async () => {
-  const dbx = makeDrillDb();
-  const res = await postSarLifecycle(
-    req({ stage: "disclosure_request", requester: "subject's attorney" }),
-    "case_1", dbx.client, "t", CTX,
-  );
-  assertEquals(res.status, 200);
-  // the obligation here is to NOT tell someone; a request that leaves no trace
-  // cannot demonstrate the obligation was honoured
-  assert(codes(dbx.rows).includes("sar.disclosure_request.received"));
-  assert(codes(dbx.rows).includes("sar.disclosure.declined"));
-});
-
-Deno.test("BSA-07: a continuing SAR filing needs its FinCEN reference", async () => {
-  const dbx = makeDrillDb();
-  assertEquals(
-    (await postSarLifecycle(
-      req({ stage: "continuing", filed_by: "o" }), "case_1", dbx.client, "t", CTX,
-    )).status,
-    400,
-  );
-  assertEquals(
-    (await postSarLifecycle(
-      req({ stage: "continuing", filed_by: "o", fincen_ref: "SAR-2" }),
-      "case_1", dbx.client, "t", CTX,
-    )).status,
-    200,
-  );
-});

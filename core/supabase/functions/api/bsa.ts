@@ -171,7 +171,9 @@ async function emitBsaEvent(
   resourceType: string,
   resourceId: string,
   payload: Record<string, unknown>,
-  ctx?: PartnerContext,
+  // required: omitted, provenanceFor defaulted every case-chain event to
+  // `production`, even under the demo key or a cass_test actor
+  ctx: PartnerContext,
 ): Promise<void> {
   const { error } = await db.schema(scope).from("event").upsert({
     id,
@@ -359,14 +361,14 @@ export async function postAlertTriage(
       await emitBsaEvent(
         db, scope, `evt_${caseId}_decision_timer`, "case.sar.decision.timer",
         "case", caseId,
-        { due_at: dueAt.toISOString(), days, from: "detection", no_suspect: rec.no_suspect === true },
+        { due_at: dueAt.toISOString(), days, from: "detection", no_suspect: rec.no_suspect === true }, ctx,
       );
       await emitBsaEvent(db, scope, `evt_${caseId}_opened`, "case.opened", "case", caseId, {
         alert_id: alertId,
         alert_type: row.alert_type,
         sar_decision_due_at: dueAt.toISOString(),
         no_suspect: rec.no_suspect === true,
-      });
+      }, ctx);
     } catch (e) {
       console.error(`case.opened event failed for ${caseId}: ${e}`);
     }
@@ -383,7 +385,7 @@ export async function postAlertTriage(
   try {
     await emitBsaEvent(
       db, scope, `evt_${alertId}_triaged`, "bsa_alert.triaged", "bsa_alert", alertId,
-      { outcome, note: isNonEmptyString(note) ? note : null, case_id: patch.case_id ?? null },
+      { outcome, note: isNonEmptyString(note) ? note : null, case_id: patch.case_id ?? null }, ctx,
     );
   } catch (e) {
     console.error(`bsa_alert.triaged event failed for ${alertId}: ${e}`);
@@ -506,7 +508,7 @@ export async function postCaseDecision(
     await emitBsaEvent(
       db, scope, `evt_${caseId}_investigation_complete`, "case.investigation_complete",
       "case", caseId,
-      { decision, alert_id: row.alert_id ?? null, decided_at: nowIso },
+      { decision, alert_id: row.alert_id ?? null, decided_at: nowIso }, ctx,
     );
     await emitBsaEvent(
       db, scope, `evt_${caseId}_decided`,
@@ -519,7 +521,7 @@ export async function postCaseDecision(
         decided_at: nowIso,
         due_at: row.sar_decision_due_at ?? null,
         late,
-      },
+      }, ctx,
     );
   } catch (e) {
     console.error(`sar decision event failed for ${caseId}: ${e}`);
@@ -581,7 +583,7 @@ export async function postTimerSweep(
       await emitBsaEvent(
         db, scope, `evt_${id}_triage_overdue`, "bsa_alert.triage.overdue",
         "bsa_alert", id,
-        { due_at: a.triage_due_at, alert_type: a.alert_type, detected_at: nowIso },
+        { due_at: a.triage_due_at, alert_type: a.alert_type, detected_at: nowIso }, ctx,
       );
       breaches.push({ kind: "triage_overdue", id, due_at: String(a.triage_due_at) });
     } catch (e) {
@@ -603,7 +605,7 @@ export async function postTimerSweep(
       await emitBsaEvent(
         db, scope, `evt_${id}_decision_overdue`, "case.sar_decision.overdue",
         "case", id,
-        { due_at: c.sar_decision_due_at, alert_id: c.alert_id ?? null, detected_at: nowIso },
+        { due_at: c.sar_decision_due_at, alert_id: c.alert_id ?? null, detected_at: nowIso }, ctx,
       );
       breaches.push({ kind: "sar_decision_overdue", id, due_at: String(c.sar_decision_due_at) });
     } catch (e) {

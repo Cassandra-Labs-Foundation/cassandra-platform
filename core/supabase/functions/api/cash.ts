@@ -195,6 +195,16 @@ export async function postCashTransaction(
   // account. A missing owner is NOT an error — it is a recorded unknown.
   let entityId: string | null = isNonEmptyString(rec.entity_id) ? rec.entity_id : null;
   let accountUnlinked = false;
+  if (entityId) {
+    // An explicit person must exist. Without this lookup the insert hit the
+    // cash_transaction.entity_id foreign key and the teller got a bare 500
+    // (caught by the cash partner-flow suite); accounts.ts pre-checks the
+    // same case for the same reason.
+    const { data: ent, error: entErr } = await db.schema(scope === "sim" ? "sim" : "core")
+      .from("entity").select("id").eq("id", entityId).maybeSingle();
+    if (entErr) return internalErrorResponse(requestId, entErr);
+    if (!ent) return notFoundResponse(requestId, "entity", entityId);
+  }
   if (!entityId && isNonEmptyString(rec.account_id)) {
     const { data: acct, error: acctErr } = await db.schema(scope === "sim" ? "sim" : "core")
       .from("account").select("id, entity_id").eq("id", rec.account_id).maybeSingle();

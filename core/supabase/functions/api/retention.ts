@@ -87,7 +87,10 @@ async function emitRetentionEvent(
   code: string,
   resourceId: string,
   payload: Record<string, unknown>,
-  ctx?: PartnerContext,
+  // required (may be undefined only for callers with genuinely no credential):
+  // omitted, every hold/release/disposal event was labelled `production` even
+  // under the demo key or a cass_test actor (caught by the partner-flow suite)
+  ctx: PartnerContext | undefined,
 ): Promise<void> {
   const { error } = await db.schema(scope).from("event").upsert({
     id,
@@ -113,6 +116,10 @@ export async function setRetentionClocks(
   subjectRef: string,
   closedAt: Date,
   scope: EvidenceScope = "core",
+  // the closing caller: without it every closure-anchored record and its
+  // events were labelled `production`, even under the demo key or a cass_test
+  // actor (caught by the BSA partner-flow suite)
+  ctx?: PartnerContext,
 ): Promise<string[]> {
   const created: string[] = [];
   for (const cls of CLOSURE_ANCHORED) {
@@ -125,7 +132,7 @@ export async function setRetentionClocks(
       retention_anchor_kind: RETENTION_SCHEDULE[cls].anchor,
       retention_expires_at: expiresAt(cls, closedAt),
       legal_hold_flag: false,
-      provenance: provenanceFor(scope),
+      provenance: provenanceFor(scope, ctx),
       // ignoreDuplicates, so a second closure cannot push the anchor forward
     }, { onConflict: "id", ignoreDuplicates: true });
     if (error) throw new Error(`retention clock (${cls}): ${error.message}`);
@@ -136,7 +143,7 @@ export async function setRetentionClocks(
       retention_anchor_kind: RETENTION_SCHEDULE[cls].anchor,
       retention_expires_at: expiresAt(cls, closedAt),
       years: RETENTION_SCHEDULE[cls].years,
-    });
+    }, ctx);
     // OQ-22 alias class, third instance. The corpus names this fact two ways:
     // `record.retention_clock_set` (SC-02) and `record.retention.expires_at`
     // (cash:CP-12). They are the same event — a clock was set and here is when
@@ -145,11 +152,11 @@ export async function setRetentionClocks(
     await emitRetentionEvent(db, scope, `evt_${id}_expires_at`, "record.retention.expires_at", id, {
       record_class: cls,
       retention_expires_at: expiresAt(cls, closedAt),
-    });
+    }, ctx);
     await emitRetentionEvent(db, scope, `evt_${id}_anchor`, "record.retention_anchor", id, {
       anchor_kind: RETENTION_SCHEDULE[cls].anchor,
       anchored_at: closedAt.toISOString(),
-    });
+    }, ctx);
     created.push(id);
   }
   return created;
@@ -211,7 +218,7 @@ export async function postLegalHold(
     placed_at: nowIso,
     placed_by: ctx.tokenId,
     status: "active",
-    provenance: provenanceFor(scope),
+    provenance: provenanceFor(scope, ctx),
   }, { onConflict: "id", ignoreDuplicates: true });
   if (insErr) return internalErrorResponse(requestId, insErr);
 
@@ -252,22 +259,22 @@ export async function postLegalHold(
       scope_subject_ref: rec.scope_subject_ref,
       scope_class: rec.scope_class ?? null,
       placed_by: ctx.tokenId,
-    });
+    }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_disposal_held`, "disposal.held", holdId, {
       matter_id: rec.matter_id,
       reason: "legal hold takes precedence over scheduled destruction",
-    });
+    }, ctx);
     // SC-02's full declared consequence set. Each of these describes something
     // the update above ACTUALLY DID: it set legal_hold_flag on the in-scope
     // records and suspended their disposal.
     await emitRetentionEvent(db, scope, `evt_${holdId}_legal_placed`, "legal.hold.placed", holdId,
-      { matter_id: rec.matter_id, scope_subject_ref: rec.scope_subject_ref });
+      { matter_id: rec.matter_id, scope_subject_ref: rec.scope_subject_ref }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_rec_placed`, "record.hold.placed", holdId,
-      { scope_subject_ref: rec.scope_subject_ref });
+      { scope_subject_ref: rec.scope_subject_ref }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_rec_applied`, "record.hold.applied", holdId,
-      { scope_subject_ref: rec.scope_subject_ref });
+      { scope_subject_ref: rec.scope_subject_ref }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_flag`, "record.legal_hold_flag", holdId,
-      { flag: true, scope_subject_ref: rec.scope_subject_ref });
+      { flag: true, scope_subject_ref: rec.scope_subject_ref }, ctx);
   } catch (e) {
     console.error(`legal hold events failed for ${holdId}: ${e}`);
   }
@@ -280,7 +287,7 @@ export async function postLegalHold(
     status: "active",
     placed_at: nowIso,
     placed_by: ctx.tokenId,
-    provenance: provenanceFor(scope),
+    provenance: provenanceFor(scope, ctx),
   }, 201, requestId);
 }
 
@@ -368,17 +375,17 @@ export async function postHoldRelease(
       released_at: nowIso,
       release_approved_by: rec.approved_by,
       matter_id: row.matter_id ?? null,
-    });
+    }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_resumed`, "disposal.clock.resumed", holdId, {
       released_at: nowIso,
-    });
+    }, ctx);
     // the release half of the same set — the flag really was cleared above
     await emitRetentionEvent(db, scope, `evt_${holdId}_legal_released`, "legal.hold.released", holdId,
-      { released_at: nowIso, release_approved_by: rec.approved_by });
+      { released_at: nowIso, release_approved_by: rec.approved_by }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_rec_released`, "record.hold.released", holdId,
-      { released_at: nowIso });
+      { released_at: nowIso }, ctx);
     await emitRetentionEvent(db, scope, `evt_${holdId}_sched_resumed`, "legal_hold.schedule.resumed", holdId,
-      { released_at: nowIso });
+      { released_at: nowIso }, ctx);
   } catch (e) {
     console.error(`hold release events failed for ${holdId}: ${e}`);
   }
@@ -428,10 +435,10 @@ export async function postDisposalSweep(
         record_class: r.record_class,
         retention_expires_at: r.retention_expires_at,
         awaiting: "records-retention approval (SC-02 condition c)",
-      });
+      }, ctx);
       await emitRetentionEvent(
         db, scope, `evt_${id}_destruction_log`, "destruction_log.entry.created", id,
-        { record_class: r.record_class, scheduled_at: nowIso },
+        { record_class: r.record_class, scheduled_at: nowIso }, ctx,
       );
       eligible.push(id);
     } catch (e) {
@@ -513,6 +520,15 @@ export async function postDisposeRecord(
   }
   // (a)
   const now = new Date();
+  // A PERMANENT record has no expiry at all. `new Date("null") > now` is
+  // false, so it used to fall through to the update, where only the database
+  // check stopped it — as a 500 (caught by the retention partner-flow suite).
+  if (row.retention_expires_at == null) {
+    return apiError(409, "retention_permanent", requestId, {
+      title: "Retained Permanently",
+      detail: `record ${recordId} (${row.record_class}) is retained permanently and can never be destroyed`,
+    });
+  }
   if (new Date(String(row.retention_expires_at)) > now) {
     return apiError(409, "retention_not_expired", requestId, {
       title: "Retention Not Expired",
@@ -538,23 +554,23 @@ export async function postDisposeRecord(
       record_class: row.record_class,
       disposed_at: nowIso,
       approved_by: rec.approved_by,
-    });
+    }, ctx);
     await emitRetentionEvent(
       db, scope, `evt_${recordId}_certified`, "record.destruction.certified", recordId,
-      { certificate: rec.certificate, disposed_at: nowIso },
+      { certificate: rec.certificate, disposed_at: nowIso }, ctx,
     );
     // the destruction log entry the disposal actually created
     await emitRetentionEvent(
       db, scope, `evt_${recordId}_log_id`, "destruction_log.entry_id", recordId,
-      { entry_id: `dlog_${recordId}`, certificate: rec.certificate },
+      { entry_id: `dlog_${recordId}`, certificate: rec.certificate }, ctx,
     );
     await emitRetentionEvent(
       db, scope, `evt_${recordId}_log_created`, "destruction_log.entry.created", recordId,
-      { entry_id: `dlog_${recordId}` },
+      { entry_id: `dlog_${recordId}` }, ctx,
     );
     await emitRetentionEvent(
       db, scope, `evt_${recordId}_expired`, "record.retention.expired", recordId,
-      { expired_at: row.retention_expires_at },
+      { expired_at: row.retention_expires_at }, ctx,
     );
   } catch (e) {
     console.error(`disposal events failed for ${recordId}: ${e}`);
@@ -608,7 +624,7 @@ export async function startRetentionFor(
   await emitRetentionEvent(db, scope, `evt_${id}_expires_at`, "record.retention.expires_at", id, {
     record_class: recordClass,
     retention_expires_at: expiresAt(recordClass, madeAt),
-  });
+  }, ctx);
   await emitRetentionEvent(db, scope, `evt_${id}_clock_set`, "record.retention_clock_set", id, {
     record_class: recordClass,
     retention_expires_at: expiresAt(recordClass, madeAt),

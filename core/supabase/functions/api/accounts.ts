@@ -533,7 +533,7 @@ export async function postAccountTransition(
   // by re-running the sweep, whereas failing the closure is not.
   if (to === "closed") {
     try {
-      await setRetentionClocks(db, accountId, new Date());
+      await setRetentionClocks(db, accountId, new Date(), "core", ctx);
     } catch (retErr) {
       console.error(`retention clocks failed for ${accountId}: ${retErr}`);
     }
