@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // EPS-06 dual control, the ACH half and the approvals queue. The wire half
 // (unconditional dual control, self-approval refused, approve/reject) is walked
 // in wires.test.ts; this flow covers what only the client limit decides:

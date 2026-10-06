@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // Member protection + resolution safe mode — MP-06, MP-07, RS-03.
 //
 // Credit-union staff (cu_admin) handle a member's death and estate, expel a

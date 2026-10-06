@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // Resolution flows: RS-02 early-warning indicators and the resolution
 // posture, RS-04 targeted account freezes, RS-05 the institution-wide freeze,
 // RS-06 the read-only member portal, RS-08 the resolution records package.

@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // Cash-operations flows (CP-01..CP-12): the institution's own currency
 // inventory — vaults, teller drawers, ATMs, night drops — as vault tellers,
 // their supervisors, treasury and the Board actually run it. Replaces the

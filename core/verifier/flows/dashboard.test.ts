@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // Compliance dashboard flows: the core's side of the monitoring surface a CCO
 // or examiner reads. The HTML lives in the staff console on Vercel; the core's
 // /compliance/dashboard 302s there, and the console reads five public core

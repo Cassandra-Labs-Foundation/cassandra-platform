@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // Isolation and violation flows: who may see across fintechs, and the
 // refusals that ARE the controls.
 //

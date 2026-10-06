@@ -6,6 +6,18 @@
 #   scripts/flow.sh -f triage          only flows/steps whose name matches "triage"
 #   scripts/flow.sh -n 5               run 5 times (flakiness check — a race passes 2/3)
 #   scripts/flow.sh --no-deploy        skip the deploy check
+#   scripts/flow.sh --changed          only the flows your uncommitted change touches
+#   scripts/flow.sh --changed origin/main   ...the change since a ref
+#   scripts/flow.sh --serial           no parallelism (debugging an interaction)
+#
+# Flow FILES run in parallel (deno test --parallel; FLOW_JOBS workers, default
+# 6), then the files marked `// flow-runner: serial` run alone, one after
+# another: they change or read instance-wide state (an institution freeze or
+# safe mode blocks every rail; exact dashboard deltas; the shared KRI), so
+# nothing may run beside them. A new flow that touches shared state must carry
+# the marker. --changed asks scripts/flow_select.py which flows a change
+# reaches (spec paths of the edited handler module, its ledger, or ALL for
+# core-wide files like the payment gate).
 #
 # Deploys only functions whose source changed since this script last deployed
 # them (hashes in .cache/flow-deploy/, gitignored). A change under _shared/
@@ -14,12 +26,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-FILTER=""; RUNS=1; DEPLOY=1
+FILTER=""; RUNS=1; DEPLOY=1; CHANGED=0; BASE=""; SERIAL_ALL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -f) FILTER="$2"; shift 2 ;;
     -n) RUNS="$2"; shift 2 ;;
     --no-deploy) DEPLOY=0; shift ;;
+    --serial) SERIAL_ALL=1; shift ;;
+    --changed)
+      CHANGED=1; shift
+      if [ $# -gt 0 ] && [[ "$1" != -* ]]; then BASE="$1"; shift; fi ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -60,23 +76,52 @@ if ! tc=$(deno check core/verifier/flows/*.ts 2>&1); then
   grep -E 'ERROR|    at ' <<<"$tc" | head -6 | sed 's/^/  /'
 fi
 
-args=(--no-check --allow-net --allow-env core/verifier/flows/)
-[ -n "$FILTER" ] && args=(--filter "$FILTER" "${args[@]}")
+# which flow files, split into the parallel and the serial group
+if [ "$CHANGED" = 1 ]; then
+  sel=$(python3 scripts/flow_select.py ${BASE:+"$BASE"})
+  if [ -z "$sel" ]; then echo "no flow touches this change"; exit 0; fi
+  if [ "$sel" = "ALL" ]; then
+    echo "core-wide change: every flow"
+    files=(core/verifier/flows/*.test.ts)
+  else
+    files=($sel); echo "affected flows: $(for f in "${files[@]}"; do basename "$f" .test.ts; done | tr '\n' ' ')"
+  fi
+else
+  files=(core/verifier/flows/*.test.ts)
+fi
+par=(); ser=()
+for f in "${files[@]}"; do
+  if [ "$SERIAL_ALL" = 1 ] || grep -q "flow-runner: serial" "$f"; then ser+=("$f"); else par+=("$f"); fi
+done
 
-pass=0
-for i in $(seq 1 "$RUNS"); do
-  out=$(NO_COLOR=1 deno test "${args[@]}" 2>&1) && ok=1 || ok=0
+base_args=(--no-check --allow-net --allow-env)
+[ -n "$FILTER" ] && base_args=(--filter "$FILTER" "${base_args[@]}")
+
+# run one group; prints its summary and failing steps, returns non-zero on red
+run_group() {
+  local label="$1"; shift
+  local out ok summary
+  out=$(NO_COLOR=1 DENO_JOBS="${FLOW_JOBS:-6}" deno test "$@" 2>&1) && ok=1 || ok=0
   # `|| true`: no summary line (a type error, a crash) must reach the
   # fallback below, not kill the script silently under pipefail
   summary=$(grep -E '^(ok|FAILED) \|' <<<"$out" | tail -1 || true)
-  if [ "$ok" = 1 ]; then
-    pass=$((pass + 1)); echo "run $i: $summary"
-  else
-    echo "run $i: ${summary:-crashed}"
+  echo "  $label: ${summary:-crashed}"
+  if [ "$ok" != 1 ]; then
     # the failing step and its assertion message, nothing else
-    { grep -E '^\S.* \.\.\. .* => |^error: ' <<<"$out" | grep -B1 '^error: Error' | grep -v '^--$' | sed 's/^/  /'; } || true
+    { grep -E '^\S.* \.\.\. .* => |^error: ' <<<"$out" | grep -B1 '^error: Error' | grep -v '^--$' | sed 's/^/    /'; } || true
     [ -z "$summary" ] && tail -15 <<<"$out"
   fi
+  [ "$ok" = 1 ]
+}
+
+pass=0
+for i in $(seq 1 "$RUNS"); do
+  t0=$SECONDS; green=1
+  echo "run $i:"
+  if [ ${#par[@]} -gt 0 ]; then run_group "parallel (${#par[@]} files)" --parallel "${base_args[@]}" "${par[@]}" || green=0; fi
+  if [ ${#ser[@]} -gt 0 ]; then run_group "serial (${#ser[@]} files)" "${base_args[@]}" "${ser[@]}" || green=0; fi
+  echo "  $([ "$green" = 1 ] && echo ok || echo FAILED) in $((SECONDS - t0))s"
+  [ "$green" = 1 ] && pass=$((pass + 1))
 done
 [ "$RUNS" -gt 1 ] && echo "$pass/$RUNS runs green"
 [ "$pass" = "$RUNS" ]

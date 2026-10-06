@@ -1,3 +1,4 @@
+// flow-runner: serial — changes or reads instance-wide state (see scripts/flow.sh)
 // People flows: the personnel facts HR declares and every control that hangs
 // off them — hiring, CP-07 coaching, CP-12 training coverage, BA-08 capital
 // training, EC-02 access grants with their quarterly review clock and
