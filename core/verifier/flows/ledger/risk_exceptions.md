@@ -59,3 +59,13 @@ Fixture discipline: all ids are run-unique. Clocks are moved only on the flow's 
 ## §46 of `compliance_e2e.sh`
 
 Nothing from §46 belongs here. RS-03, MP-06/07, PR-03/04/15 and CP-05 are already covered in `member_protection.test.ts` and `isolation.test.ts`. DF-05 is lending, which is unrouted.
+
+### Added 2026-10-06 (stubs written with the ERM-07 / IC-06 fixes)
+
+| test | disposition | where |
+|---|---|---|
+| ERM-07: only a CCO credential decides; the owner cannot grant their own acceptance | flow | `risk.test.ts` → "ERM-07: a staff credential without the CCO role cannot decide an acceptance (403) …" + "the owner cannot grant their own acceptance (409) …" |
+| ERM-07: the credential that requested an acceptance cannot decide it, even as CCO | added | `risk.test.ts` → "ERM-07: the credential that REQUESTED an acceptance cannot decide it, even with the CCO role (409)" |
+| ERM-07: the 30-day alert and the 7-day warning fire at their OWN thresholds, each once | flow | `risk.test.ts` → "20 days from expiry (clock moved): the sweep sends the 30-day alert once …" + "ERM-07: the 7-day expiry warning has NOT fired 20 days out" |
+| ERM-07: a lapsed acceptance creates ONE breach RECORD for its risk, copying the covered breach | flow | `risk.test.ts` → "the expiry date passes (clock moved): the sweep expires it and the risk is back in breach" + "an expired acceptance is not swept again" |
+| IC-06: a standing exception must reference a risk acceptance (400), and a real one (404) | flow | `risk.test.ts` → "IC-06: a standing exception with no risk acceptance behind it is refused" |

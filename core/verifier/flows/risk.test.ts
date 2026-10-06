@@ -317,6 +317,27 @@ flow("risk: the owner asks to carry a breached risk for a bounded time → someo
       assertEq((await rowById("risk_acceptance", acc)).decision, null, "undecided");
     });
 
+    await t.step("ERM-07: the credential that REQUESTED an acceptance cannot decide it, even with the CCO role (409)", async () => {
+      // four eyes on credentials, not typed names: a CCO who files the request
+      // is not the independent decider
+      const requester = await actor("cu_admin", ["cco"]);
+      const own = await api("POST", "/risk/acceptances", {
+        risk_id: riskId, owner_id: owner, rationale: "requested by the CCO themself",
+        breach_id: breach, expiry_date: inDays(90), remediation_evidence: "flow",
+      }, { key: requester });
+      assertEq(own.status, 201, `CCO files a request (${body(own)})`);
+      const ownId = own.body.data.id;
+      try {
+        const res = await api("POST", `/risk/acceptances/${ownId}/decide`,
+          { decision: "accepted", decided_by: "board_risk_committee" }, { key: requester });
+        assertEq(res.status, 409, `the requester decides its own request (${body(res)})`);
+        assertEq((await rowById("risk_acceptance", ownId)).decision, null, "undecided");
+      } finally {
+        // keep the flow's later sweep steps about the ONE acceptance under test
+        await core().from("risk_acceptance").delete().eq("id", ownId);
+      }
+    });
+
     await t.step("the CCO accepts it on time: decision recorded with the decider, decided event not late", async () => {
       const res = await api("POST", `/risk/acceptances/${acc}/decide`, { decision: "accepted", decided_by: "board_risk_committee" }, { key: cco });
       assertEq(res.status, 200, `decide (${body(res)})`);
