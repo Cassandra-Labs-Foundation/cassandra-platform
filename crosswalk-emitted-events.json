@@ -1892,6 +1892,10 @@
       "source": "core/supabase/functions/api/resolution.ts:295"
     },
     {
+      "code": "institution_freeze.released",
+      "source": "core/supabase/functions/api/resolution.ts:438"
+    },
+    {
       "code": "instrument_list.review.completed",
       "source": "core/supabase/functions/api/investment.ts:156"
     },
@@ -2095,6 +2099,10 @@
     {
       "code": "member_portal.readonly.activated",
       "source": "core/supabase/functions/api/resolution.ts:336"
+    },
+    {
+      "code": "member_portal.readonly.disabled",
+      "source": "core/supabase/functions/api/resolution.ts:500"
     },
     {
       "code": "member_portal.snapshot_served",

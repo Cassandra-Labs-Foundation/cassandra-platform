@@ -378,12 +378,33 @@ async function freshPositionDate(): Promise<string> {
 flow("internal_controls: CP-08/CP-09 — the CFO proposes and executes contingency capital actions: never ahead of the regulator, never a restricted distribution, never without the Board", async (t) => {
   const cfo = await actor("pynthia_ops", ["cfo"]);
   const partner = await actor("partner");
-  const pos = rid("cap");
+  // A REAL, well-capitalized position: the core now reads the restriction from
+  // the position (and 404s an unknown one), so a made-up id no longer works.
+  let pos = "";
   const action = (o: Record<string, unknown>, key = cfo) =>
     api("POST", "/capital/actions", { position_id: pos, ...o }, { key });
   const createdPositions: string[] = [];
 
   try {
+    await t.step("the CFO posts a well-capitalized position to act against", async () => {
+      const date = await freshPositionDate();
+      const p = await api("POST", "/capital/positions", {
+        as_of_date: date, net_worth_cents: 1_000_000_000, total_assets_cents: 10_000_000_000,
+      }, { key: cfo });
+      assertEq(p.status, 201, `position (${body(p)})`);
+      pos = `cap_${date.replace(/-/g, "")}`;
+      createdPositions.push(pos);
+      assertEq((await rowById("capital_position", pos)).distribution_restricted, false, "no PCA restriction");
+    });
+
+    await t.step("a capital action against a position that does not exist is 404", async () => {
+      const r = await api("POST", "/capital/actions", {
+        position_id: rid("cap"), action_type: "asset_sale", amount_cents: 1,
+        regulatory_preapproval_status: "not_required", board_resolution_id: "BR-flow",
+      }, { key: cfo });
+      assertEq(r.status, 404, `unknown position (${body(r)})`);
+    });
+
     await t.step("a partner cannot reach capital actions; an unknown action type is refused", async () => {
       refusedToPartner(await action({ action_type: "subordinated_debt", amount_cents: 1 }, partner), "capital action");
       const bad = await action({ action_type: "bake_sale", amount_cents: 1 });
@@ -463,12 +484,12 @@ flow("internal_controls: CP-08/CP-09 — the CFO proposes and executes contingen
         position_id: posIdForDate, action_type: "distribution", amount_cents: 500_000,
         regulatory_preapproval_status: "not_required", board_resolution_id: "BR-flow", execute: true,
       }, { key: cfo });
-      // DEFECT: postCapitalAction reads distribution_restriction from the request body, never from the position; an undercapitalized position's restricted distribution executes 201.
+      // Regression guard (fixed 2026-10-06): postCapitalAction used to read distribution_restriction from the request body, never from the position, so an undercapitalized position's distribution executed 201. It now reads capital_position.distribution_restricted (unknown position = 404).
       assertEq(r.status, 409, `distribution on a restricted position (${body(r)})`);
     });
   } finally {
     if (createdPositions.length) {
-      // the action the DEFECT lets through would otherwise outlive its position
+      // an action that slipped through (the pre-2026-10-06 CP-09 defect) would otherwise outlive its position
       const a = await core().from("capital_action").delete().in("position_id", createdPositions);
       if (a.error) console.error(`cleanup capital_action: ${a.error.message}`);
       const d = await core().from("capital_position").delete().in("id", createdPositions);
@@ -545,7 +566,7 @@ flow("internal_controls: DF-06 — the CUSO is listed as an affiliate; credit to
     const r = await tx({
       type: "credit", amount_cents: 6_000_000, capital_surplus_cents: 100_000_000, lqa_screened: true, fund: true,
     });
-    // DEFECT: postAffiliateTransaction checks each transaction alone and keys rows afftx_<affiliate>_<type>; a second credit funds (201) and OVERWRITES the first, so aggregate exposure is never limited.
+    // Regression guard (fixed 2026-10-06): postAffiliateTransaction used to check each transaction alone and key rows afftx_<affiliate>_<type>, so a second credit funded and OVERWROTE the first. Each transaction is now its own row and the limit applies to the sum of funded transactions plus the new one.
     assertEq(r.status, 409, `aggregate over the limit (${body(r)})`);
     assertEq(Number((await rowById("affiliate_transaction", txId)).affiliate_transaction_amount_cents), 5_000_000, "the first funded credit is still on record");
   });

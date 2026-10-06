@@ -1,10 +1,10 @@
 {
   "meta": {
     "generator": "verifier/generator/enumerate.py",
-    "total": 770,
+    "total": 771,
     "inputs": {
       "core_api_resources": 67,
-      "endpoints": 372,
+      "endpoints": 373,
       "controls": 333,
       "properties": 41,
       "floor_controls": 7
@@ -5065,6 +5065,22 @@
         "method": "POST",
         "path": "/resolution/institution-freeze",
         "operation": "post_institution_freeze"
+      }
+    },
+    {
+      "target_id": "contract:POST:/resolution/institution-freeze/{id}/release",
+      "kind": "contract",
+      "pillars": [
+        "functional",
+        "security"
+      ],
+      "tier": "light_api",
+      "status": "ready",
+      "source": "core-api.yaml endpoints POST /resolution/institution-freeze/{id}/release",
+      "payload": {
+        "method": "POST",
+        "path": "/resolution/institution-freeze/{id}/release",
+        "operation": "post_institution_freeze_release"
       }
     },
     {

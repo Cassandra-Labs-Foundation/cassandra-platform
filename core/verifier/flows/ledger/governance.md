@@ -22,7 +22,7 @@ There are two flows. **anchored** is `governance: staff register a quarterly obl
 | 11 | an UNSCHEDULED obligation cannot be completed | added | unscheduled → "it cannot be completed … (409 obligation_unscheduled), nothing logged" |
 | 12 | the sweep fires the CATALOGUE's own trigger code | added | anchored → "the sweep fires the CATALOGUE's trigger code (not a generic 'due') and names it OVERDUE …" |
 | 13 | a due obligation nobody completed is reported OVERDUE | added | same step (`days_late`, plus `governance.obligation.overdue` evidence) |
-| 14 | an obligation completed since it came due is NOT overdue | added | anchored → "the next cycle (due 2025-04-01) is itself past due and nobody did it …". **DEFECT, red.** The unit test encodes the bug. Live, the only way `last_completed_at > next_due_at` can happen is a late completion of the *previous* cycle, and that hides a past-due cycle nobody did. |
+| 14 | an obligation completed since it came due is NOT overdue | added | anchored → "the next cycle (due 2025-04-01) is itself past due and nobody did it …". Regression guard (fixed 2026-10-06). The unit test encoded the bug: live, the only way `last_completed_at > next_due_at` can happen is a late completion of the *previous* cycle, and that hid a past-due cycle nobody did. The sweep now judges overdue per due cycle against the completion log, and the unit test was rewritten to match. |
 | 15 | UNSCHEDULED is reported separately from overdue, never merged | added | unscheduled → "the sweep reports it UNSCHEDULED — separately from overdue, never fired — and names the state in its warning" |
 | 16 | a fully scheduled, fully current calendar reports no warning | added (partial) | unscheduled → "staff anchor it in the future: now scheduled, not due, and off the unscheduled list". The *instance-wide* "no warning" verdict depends on every obligation on the shared core, so the flow does not assert it. |
 | 17 | sweep event ids are deterministic per due date | added | anchored → "re-sweeping does not pile up: one due event and one overdue event per due date" |
@@ -40,3 +40,10 @@ There are two flows. **anchored** is `governance: staff register a quarterly obl
 ## §46 of `compliance_e2e.sh`
 
 Nothing from §46 belongs here. RS-03 is in `member_protection.test.ts`. MP-06/07, PR-03/04/15 and CP-05 are in `isolation.test.ts`. DF-05 is lending, which is deliberately unrouted.
+
+### Added 2026-10-06 (stubs written with the overdue fix)
+
+| test | disposition | where |
+|---|---|---|
+| a late completion of an EARLIER cycle does not clear the current one — still overdue | flow | `governance.test.ts` → "the next cycle (due 2025-04-01) is itself past due and nobody did it: the sweep fires it and names it OVERDUE" |
+| a due cycle with a completion logged against THAT cycle is not overdue | flow | `governance.test.ts` → the anchored flow's completion steps (a cycle completed against its own due date is not listed overdue) |

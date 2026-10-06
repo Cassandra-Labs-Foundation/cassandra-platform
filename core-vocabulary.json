@@ -3,7 +3,7 @@
     "spec_title": "Cassandra Banking Core API",
     "spec_version": "3.2.0",
     "parser_version": "0.2.0",
-    "parsed_at": "2026-10-06T00:42:24.454102Z",
+    "parsed_at": "2026-10-06T02:33:50.241476Z",
     "note": "Specific domain codes (e.g. sar.filed, vendor_review) live as `subject` values in vocab-migration.json, not as distinct vocabulary elements.",
     "sources": [
       "core-api.yaml",
@@ -14,8 +14,8 @@
     "entities": 273,
     "fields": 2583,
     "computed_fields": 0,
-    "events": 1473,
-    "endpoints": 372,
+    "events": 1475,
+    "endpoints": 373,
     "state_machines": 25,
     "plugins": 0,
     "task_types": 54,
@@ -51880,6 +51880,12 @@
       "description": "canonical event_type: `confirmed`"
     },
     {
+      "name": "institution_freeze.released",
+      "code": "institution_freeze.released",
+      "entity": "institution_freeze",
+      "description": "canonical event_type: `released`"
+    },
+    {
       "name": "instrument_list.review.completed",
       "code": "instrument_list.review.completed",
       "entity": "instrument_list",
@@ -52634,6 +52640,12 @@
       "code": "member_portal.readonly.activated",
       "entity": "member_portal",
       "description": "canonical event_type: `activated`"
+    },
+    {
+      "name": "member_portal.readonly.disabled",
+      "code": "member_portal.readonly.disabled",
+      "entity": "member_portal",
+      "description": "canonical event_type: `disabled`"
     },
     {
       "name": "member_portal.snapshot_served",
@@ -58647,6 +58659,15 @@
       "method": "POST",
       "path": "/resolution/institution-freeze",
       "summary": "post_institution_freeze",
+      "control_refs": [],
+      "audit_events": [],
+      "request_schema": null,
+      "response_schema": null
+    },
+    {
+      "method": "POST",
+      "path": "/resolution/institution-freeze/{id}/release",
+      "summary": "post_institution_freeze_release",
       "control_refs": [],
       "audit_events": [],
       "request_schema": null,

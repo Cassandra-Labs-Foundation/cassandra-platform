@@ -582,7 +582,7 @@ export async function postExternalComms(
 ): Promise<Response> {
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
   const { data: row } = await db.schema(scope).from("incident")
-    .select("id, legal_review_at, assessment_completed_at").eq("id", id).maybeSingle();
+    .select("id, legal_review_at, legal_review_by, assessment_completed_at").eq("id", id).maybeSingle();
   if (!row) return notFoundResponse(requestId, "incident", id);
 
   const legalBy = isNonEmptyString(body.legal_reviewed_by) ? body.legal_reviewed_by : null;
@@ -608,11 +608,17 @@ export async function postExternalComms(
   }).eq("id", id);
   if (error) return internalErrorResponse(requestId, error.message);
 
-  await emit(db, scope, `evt_${id}_extcomms`, "incident.external_comms.recorded", id, {
-    "comms.holding_statement": body.holding_statement,
-    "incident.comms_plan": body.comms_plan ?? {},
-    "incident.legal_review": legalBy ?? row.legal_review_at,
-  }, ctx);
+  // EVERY statement that goes out is its own piece of evidence, verbatim. The
+  // row keeps only the LATEST statement (what reads of the incident expect);
+  // the event log is the append-only record of all of them. A fixed event id
+  // with ignoreDuplicates used to swallow every statement after the first.
+  await emit(db, scope, `evt_${id}_extcomms_${crypto.randomUUID()}`,
+    "incident.external_comms.recorded", id, {
+      "comms.holding_statement": body.holding_statement,
+      "incident.comms_plan": body.comms_plan ?? {},
+      "incident.legal_review": legalBy ?? row.legal_review_by ?? row.legal_review_at,
+      sent_at: now,
+    }, ctx);
   return jsonResponse({ id, external_comms_at: now }, 200, requestId);
 }
 

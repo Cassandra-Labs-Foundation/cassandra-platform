@@ -10,7 +10,10 @@
 // SHARED-STATE DISCIPLINE.
 //   * Freezes are on this run's own accounts and are released at the end.
 //   * The institution freeze row is the flow's own order and is deleted at the
-//     end (there is no release route); nothing in the core reads it today.
+//     end (there is no release route). The core ENFORCES it (runGate refuses
+//     every movement while any freeze is active), so while this flow's order is
+//     active every rail on the instance is halted: do not run it concurrently
+//     with other money-moving flows.
 //   * The member portal state is ONE instance-wide row ("portal"): the flow
 //     saves it first and restores it exactly in a finally.
 //   * The resolution posture is instance-wide (latest row wins) and every EWI
@@ -77,7 +80,8 @@ flow("resolution: legal process freezes a member's account → freezes from seve
   const freeze = (o: Record<string, unknown>) => api("POST", "/resolution/freezes", { account_ref: acct, ...o }, { key: legal });
   const release = (id: string, o: Record<string, unknown> = { release_reference: "order lifted" }) =>
     api("POST", `/resolution/freezes/${id}/release`, o, { key: legal });
-  const fid = (authority: string) => `frz_${acct}_${authority}`;
+  // one freeze per (account, authority, order): the reference is part of the id
+  const fid = (authority: string, ref: string) => `frz_${acct}_${authority}_${ref}`;
   const accountRow = () => rowById("account", acct);
   try {
     await t.step("the partner onboards a member with $1,000 checking, and a second member to pay", async () => {
@@ -108,7 +112,7 @@ flow("resolution: legal process freezes a member's account → freezes from seve
       const res = await freeze({ authority: "court_order", legal_process_reference: "NC-CV-2026-118", order_reference: "ORD-118" });
       assertEq(res.status, 201, `court order (${body(res)})`);
       assertEq(res.body.data.active_freezes, 1, "one freeze");
-      const f = await rowById("account_freeze", fid("court_order"));
+      const f = await rowById("account_freeze", fid("court_order", "NC-CV-2026-118"));
       assertEq(f.account_freeze_legal_process_reference, "NC-CV-2026-118", "process stored");
       assertEq(f.precedence, 10, "court process outranks everything");
       assert(String(f.applied_by).startsWith("tok_test_"), `applied_by is the credential (${f.applied_by})`);
@@ -117,15 +121,16 @@ flow("resolution: legal process freezes a member's account → freezes from seve
       assertEq(a.debits_blocked, true, "debits blocked");
       assertEq(a.credits_blocked, true, "credits blocked");
       assertEq(a.active_freeze_count, 1, "count");
-      assertEq((await eventsFor("account_freeze", fid("court_order"))).get("account_freeze.applied")?.[0].payload["account_freeze.legal_process_reference"],
+      assertEq((await eventsFor("account_freeze", fid("court_order", "NC-CV-2026-118"))).get("account_freeze.applied")?.[0].payload["account_freeze.legal_process_reference"],
         "NC-CV-2026-118", "applied event names the process");
     });
 
     await t.step("RS-04: a debit from the court-frozen account is REFUSED and no money leaves", async () => {
       const before = await balanceOf(partner, acct);
       const res = await transfer(partner, acct, other, 10_000);
-      // DEFECT: nothing outside resolution.ts reads account.debits_blocked / account_freeze — POST /transfers moves
-      // money out of an account under a court-ordered freeze (RS-04: "blocks all debit transactions").
+      // Regression guard (fixed 2026-10-06): nothing outside resolution.ts read account_freeze, so POST /transfers
+      // moved money out of an account under a court-ordered freeze (RS-04: "blocks all debit transactions").
+      // runGate now refuses every rail with 423 account_frozen.
       assert(res.status >= 400, `transfer from a frozen account was accepted (${res.status} ${body(res)})`);
       assertEq(await balanceOf(partner, acct), before, "balance unchanged");
     });
@@ -136,35 +141,35 @@ flow("resolution: legal process freezes a member's account → freezes from seve
       assertEq(res.body.data.active_freezes, 2, "two standing");
       assertEq(res.body.data.governing, "court_order", "court order governs");
       assertEq((await accountRow()).active_freeze_count, 2, "account counts two");
-      const prec = (await eventsFor("account_freeze", fid("fraud_hold"))).get("account_freeze.precedence.resolved")?.[0];
+      const prec = (await eventsFor("account_freeze", fid("fraud_hold", "FRD-9"))).get("account_freeze.precedence.resolved")?.[0];
       assertEq(prec?.payload.governing_authority, "court_order", "precedence resolved and recorded");
     });
 
     await t.step("a release that names no authority is refused (400) and the account stays frozen; an unknown freeze is 404", async () => {
-      const res = await release(fid("fraud_hold"), {});
+      const res = await release(fid("fraud_hold", "FRD-9"), {});
       assertEq(res.status, 400, `no reference (${body(res)})`);
-      assertEq((await rowById("account_freeze", fid("fraud_hold"))).released_at, null, "not released");
+      assertEq((await rowById("account_freeze", fid("fraud_hold", "FRD-9"))).released_at, null, "not released");
       assertEq((await accountRow()).active_freeze_count, 2, "still two");
       const unk = await release(`frz_${acct}_member_request`);
       assertEq(unk.status, 404, `unknown freeze (${body(unk)})`);
     });
 
     await t.step("THE BUG THIS EXISTS TO PREVENT: releasing the fraud hold leaves the court order standing", async () => {
-      const res = await release(fid("fraud_hold"), { release_reference: "fraud cleared FRD-9" });
+      const res = await release(fid("fraud_hold", "FRD-9"), { release_reference: "fraud cleared FRD-9" });
       assertEq(res.status, 200, `release (${body(res)})`);
       assertEq(res.body.data.remaining_freezes, 1, "one remains");
       const a = await accountRow();
       assertEq(a.active_freeze_count, 1, "count derived from what is still standing");
       assertEq(a.debits_blocked, true, "the court order is still enforced");
-      const f = await rowById("account_freeze", fid("fraud_hold"));
+      const f = await rowById("account_freeze", fid("fraud_hold", "FRD-9"));
       assert(f.released_at && String(f.released_by).startsWith("tok_test_"), "release stamped with the credential");
       assertEq(f.account_freeze_release_reference, "fraud cleared FRD-9", "release reference stored");
-      const ev = (await eventsFor("account_freeze", fid("fraud_hold"))).get("account_freeze.released")?.[0];
+      const ev = (await eventsFor("account_freeze", fid("fraud_hold", "FRD-9"))).get("account_freeze.released")?.[0];
       assertEq(ev?.payload.still_blocked, true, "release event says the account is still blocked");
     });
 
     await t.step("releasing the LAST freeze clears the account — derived, not set", async () => {
-      const res = await release(fid("court_order"), { release_reference: "order vacated NC-CV-2026-118" });
+      const res = await release(fid("court_order", "NC-CV-2026-118"), { release_reference: "order vacated NC-CV-2026-118" });
       assertEq(res.status, 200, `release (${body(res)})`);
       const a = await accountRow();
       assertEq(a.active_freeze_count, 0, "none left");
@@ -188,8 +193,8 @@ flow("resolution: legal process freezes a member's account → freezes from seve
 
     await t.step("RS-04: the credit the core says it POSTED actually lands in the member's balance", async () => {
       const bal = await balanceOf(partner, acct);
-      // DEFECT: postFrozenAccountCredit only emits account_freeze.credit.posted and answers posted:true —
-      // no ledger entry is made, so the payroll the policy says must post never reaches the balance.
+      // Regression guard (fixed 2026-10-06): postFrozenAccountCredit used to emit account_freeze.credit.posted and
+      // answer posted:true with no ledger entry; it now posts @ResolutionCredits -> the account in Blnk first.
       assert(bal >= 100_000 + 250_000 - 10_000, `balance ${bal} after a $2,500 credit reported posted on a $1,000 account`);
     });
 
@@ -201,7 +206,7 @@ flow("resolution: legal process freezes a member's account → freezes from seve
       assertEq(cr.status, 200, `refused credit (${body(cr)})`);
       assertEq(cr.body.data.posted, false, "not posted");
       assertEq(cr.body.data.reason, "credits blocked", "reason");
-      const rel = await release(fid("ofac"), { release_reference: "SDN false positive" });
+      const rel = await release(fid("ofac", "SDN-hit"), { release_reference: "SDN false positive" });
       assertEq(rel.status, 200, `release ofac (${body(rel)})`);
       assertEq((await accountRow()).credits_blocked, false, "credits open again under the garnishment alone");
     });
@@ -210,8 +215,8 @@ flow("resolution: legal process freezes a member's account → freezes from seve
       const res = await freeze({ authority: "garnishment", legal_process_reference: "NC-GARN-2" });
       assertEq(res.status, 201, `second garnishment (${body(res)})`);
       const live = (await rowsWhere("account_freeze", "account_ref", acct)).filter((f) => !f.released_at);
-      // DEFECT: the freeze id is frz_<account>_<authority>, so a second garnishment upserts over the first —
-      // NC-GARN-1 disappears, and releasing "the" garnishment would release both orders (the legal-hold bug again).
+      // Regression guard (fixed 2026-10-06): the freeze id was frz_<account>_<authority>, so a second garnishment
+      // upserted over the first. The legal process reference is now part of the id.
       assertEq(live.length, 2, `standing freezes (${live.map((f) => f.account_freeze_legal_process_reference).join(",")})`);
       assertEq((await accountRow()).active_freeze_count, 2, "account counts two garnishments");
     });
@@ -289,8 +294,9 @@ flow("resolution: an NCUA order freezes the institution → activation needs evi
       b = await openAccount(partner, await entity(partner), 1_000);
       const before = await balanceOf(partner, a);
       const res = await transfer(partner, a, b, 1_000);
-      // DEFECT: nothing reads core.institution_freeze — an activated NCUA freeze (RS-05: "halting all outbound and
-      // new-account transactions") leaves every rail open. (Even the account opening above succeeded.)
+      // Regression guard (fixed 2026-10-06, user decision to enforce): nothing read core.institution_freeze, so an
+      // activated NCUA freeze (RS-05: "halting all outbound and new-account transactions") left every rail open.
+      // runGate now refuses every movement with 423 institution_frozen. (Account opening is not gated by runGate.)
       assert(res.status >= 400, `transfer during an institution freeze was accepted (${res.status} ${body(res)})`);
       assertEq(await balanceOf(partner, a), before, "balance unchanged");
     });
@@ -339,8 +345,8 @@ flow("resolution: with the core down the member portal goes read-only on a dated
     await t.step("RS-06: THIS activation is evidenced (member_portal.readonly.activated naming our snapshot)", async () => {
       const r2 = await core().from("event").select("id, payload").eq("code", "member_portal.readonly.activated");
       assert(!r2.error, `event read: ${r2.error?.message}`);
-      // DEFECT: the event id is the constant `ev_portal_ro` with ignoreDuplicates, so only the first activation in
-      // the instance's life is ever evidenced; every later read-only activation leaves no event.
+      // Regression guard (fixed 2026-10-06): the event id was the constant `ev_portal_ro` with ignoreDuplicates,
+      // so only the first activation in the instance's life was ever evidenced. Each switch now has its own id.
       assert((r2.data ?? []).some((e: Any) => sameInstant(e.payload?.snapshot_as_of ?? null, snapshot)),
         `no activation event for this snapshot (${(r2.data ?? []).length} activation event(s) exist in total)`);
     });
@@ -360,8 +366,8 @@ flow("resolution: with the core down the member portal goes read-only on a dated
 
     await t.step("RS-06: leaving read-only mode needs the CCO — a staff credential without the role is refused (403)", async () => {
       const res = await api("POST", "/resolution/member-portal", { activate: false }, { key: noRole });
-      // DEFECT: postMemberPortalState has no role gate; RS-06 says read-only mode "requires explicit CCO
-      // authorization to deactivate". Any internal credential can switch it off.
+      // Regression guard (fixed 2026-10-06): postMemberPortalState had no role gate; RS-06 says read-only mode
+      // "requires explicit CCO authorization to deactivate". Deactivation now needs the cco role.
       assertEq(res.status, 403, `no-role deactivation (${body(res)})`);
     });
 
@@ -388,7 +394,7 @@ flow("resolution: with the core down the member portal goes read-only on a dated
 
 // ------------------------------------------------------- RS-02 EWI posture
 
-flow("resolution: early-warning indicators are swept → no threshold, no verdict → a breach is confirmed over two intervals before the posture moves → the CEO is told on the CHANGE, not on every sweep", async (t) => {
+flow("resolution: early-warning indicators are swept → no threshold, no verdict → each interval sets the posture from its breach count (no damping, decided 2026-10-06) → the CEO is told on the CHANGE, not on every sweep", async (t) => {
   const partner = await actor("partner");
   const risk = await actor("cu_admin", ["cco"]);
   const r = run();
@@ -461,21 +467,21 @@ flow("resolution: early-warning indicators are swept → no threshold, no verdic
       assertEq(await breachedEvents(ind.out), 1, "ewi.threshold.breached once");
     });
 
-    await t.step("RS-02: ONE breached interval does not move the posture — two consecutive intervals must confirm it", async () => {
-      // DEFECT: postEwiSweep sets the posture from a single sweep's breach count; RS-02's two-consecutive-interval
-      // damping rule (and the matching two-interval step-down) is not implemented, so one spike moves the
-      // institution's posture and one clean reading of any single indicator steps it back down.
-      assertEq((await latestPosture()).resolution_posture_current, "normal", "posture after a single breached interval");
-    });
-
-    await t.step("the second consecutive breached interval: WATCH, the change evidenced, the CEO summary sent; the breach is NOT re-alerted", async () => {
-      await sweep([[ind.out, 450]]);
+    // User decision 2026-10-06: KEEP single-sweep posture changes (no two-interval damping) — one sweep moves it up AND down.
+    await t.step("RS-02: ONE breached interval moves the posture to WATCH — the change evidenced, the CEO summary sent", async () => {
       const p = await latestPosture();
-      assertEq(p.resolution_posture_current, "watch", "watch");
+      assertEq(p.resolution_posture_current, "watch", "watch after a single breached interval");
       assert(String(p.changed_by).startsWith("tok_test_"), "changed by our credential");
       const ev = await eventsFor("resolution_posture", p.id);
       assertEq(ev.get("resolution_posture.changed")?.[0].payload["resolution_posture.current"], "watch", "posture change evidenced");
       assert(ev.has("ewi.ceo_summary.sent"), "CEO summary on the change");
+    });
+
+    await t.step("the next interval still breached: still WATCH, no new posture, and the breach is NOT re-alerted", async () => {
+      const before = (await myPostures()).length;
+      await sweep([[ind.out, 450]]);
+      assertEq((await myPostures()).length, before, "no posture row");
+      assertEq((await latestPosture()).resolution_posture_current, "watch", "still watch");
       assertEq(await breachedEvents(ind.out), 1, "an already-breached indicator does not re-alert");
       const obs = (await obsOf(ind.out)).sort((a, b) => Number(a.ewi_value) - Number(b.ewi_value));
       const second = obs.find((o) => Number(o.ewi_value) === 450);
@@ -491,15 +497,25 @@ flow("resolution: early-warning indicators are swept → no threshold, no verdic
       assertEq((await latestPosture()).resolution_posture_current, "watch", "still watch");
     });
 
-    await t.step("three indicators breached for two intervals: HEIGHTENED, with its own CEO summary", async () => {
+    await t.step("three indicators breached in ONE interval: HEIGHTENED at once, with its own CEO summary; a repeat changes nothing", async () => {
       const three: [string, number][] = [[ind.out, 470], [ind.lar, 800], [ind.npl, 300]];
-      await sweep(three);
       const s = await sweep(three);
       assertEq(s.breached, 3, "three breached");
       const p = await latestPosture();
-      assertEq(p.resolution_posture_current, "heightened", "heightened");
+      assertEq(p.resolution_posture_current, "heightened", "heightened after one interval");
       assert((await eventsFor("resolution_posture", p.id)).has("ewi.ceo_summary.sent"), "CEO told of the escalation");
+      const before = (await myPostures()).length;
+      await sweep(three);
+      assertEq((await myPostures()).length, before, "no posture row on the repeat");
       assertEq(await breachedEvents(ind.lar), 1, "lar alerted once over two intervals");
+    });
+
+    await t.step("ONE clean interval steps the posture straight back down to NORMAL, and the change is evidenced", async () => {
+      await sweep([[ind.out, 100], [ind.lar, 100], [ind.npl, 100]]);
+      const p = await latestPosture();
+      assertEq(p.resolution_posture_current, "normal", "normal after a single clean interval");
+      const ev = await eventsFor("resolution_posture", p.id);
+      assertEq(ev.get("resolution_posture.changed")?.[0].payload.from, "heightened", "step-down evidenced from heightened");
     });
   } finally {
     // the posture is instance-wide: remove the rows this flow caused, so the latest is what it was
@@ -525,7 +541,7 @@ flow("resolution: the records package is built against a manifest → only a mat
   const row = (m: string) => rowById("records_package", `recpkg_${m}`);
   const ev = (m: string) => eventsFor("records_package", `recpkg_${m}`);
   const m = { none: `man_flow_none_${r}`, bad: `man_flow_bad_${r}`, good: `man_flow_good_${r}`, retry: `man_flow_retry_${r}` };
-  const NO_ROW = "no records_package row for this manifest (see the RECORDED step's DEFECT)";
+  const NO_ROW = "no records_package row for this manifest (see the RECORDED step)";
 
   await t.step("a partner cannot build a package (404); a package with no manifest is refused (400)", async () => {
     const p = await api("POST", "/resolution/records-packages", { manifest_id: m.good }, { key: partner });
@@ -573,9 +589,9 @@ flow("resolution: the records package is built against a manifest → only a mat
     const none = await row(m.none);
     const bad = await row(m.bad);
     const good = await row(m.good);
-    // DEFECT: resolution.ts postRecordsPackage never sets `purpose`, which cash_operations.sql made NOT NULL on the
-    // shared core.records_package table (cash_ops.ts exam exports), and it ignores the upsert error — so no RS-08
-    // package is ever stored, while the API answers verified:true and logs records_package.completed for it.
+    // Regression guard (fixed 2026-10-06): postRecordsPackage never set `purpose` (NOT NULL on the table shared with
+    // the cash-ops exam exports) and ignored the upsert error, so no RS-08 package was ever stored while the API
+    // answered verified:true. It now sets purpose 'resolution' and fails loudly on any write error.
     assert(none && bad && good, `rows: none=${!!none} bad=${!!bad} good=${!!good}`);
     assertEq(none.completed_at, null, "no-chain package not completed");
     assert(none.verification_failed_at, "no-chain package failed");
@@ -592,9 +608,8 @@ flow("resolution: the records package is built against a manifest → only a mat
   await t.step("RS-08: a SEALED package is write-once — resubmitting its manifest with another chain is refused and nothing about it changes", async () => {
     const before = await row(m.good);
     const res = await pkg({ manifest_id: m.good, snapshot_id: `snap_tampered_${r}`, checksum_chain: { root: "deadbeef" }, expected_checksum: "cafebabe" });
-    // DEFECT: postRecordsPackage upserts by manifest with no sealed check — a resubmission of a completed manifest
-    // is processed again (200 "verification failed") and a records_package.verification.failed is logged against
-    // the package that was already completed and sealed.
+    // Regression guard (fixed 2026-10-06): postRecordsPackage upserted by manifest with no sealed check, so a
+    // resubmitted completed manifest was reprocessed and a verification failure logged against it. Now 409.
     assert(!(await ev(m.good)).has("records_package.verification.failed"), "failure evidence logged against a sealed package");
     assertEq(res.status, 409, `resubmission of a sealed package (${body(res)})`);
     const after = await row(m.good);
@@ -610,9 +625,9 @@ flow("resolution: the records package is built against a manifest → only a mat
     const p = await row(m.retry);
     const completedEvent = (await ev(m.retry)).has("records_package.completed");
     assert(p, NO_ROW);
-    // Once rows persist (see above), a rebuild that keeps verification_failed_at and then sets completed_at
-    // violates ck_package_not_both and is silently dropped — the response and event would say complete, the
-    // record failed. Either outcome is acceptable as long as all three agree.
+    // A rebuild must not leave the answer, the event and the record disagreeing (ck_package_not_both forbids a
+    // row both completed and failed). The core completes it and clears the failure stamp in the same write; a
+    // refusal would also be acceptable as long as all three agree.
     if (res.status === 201) {
       assert(p.completed_at, `answered verified:true and logged completed=${completedEvent}, but the record is not complete (failed_at ${p.verification_failed_at})`);
       assertEq(p.verification_failed_at, null, "a completed package carries no failure stamp");

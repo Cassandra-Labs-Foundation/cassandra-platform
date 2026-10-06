@@ -91,6 +91,63 @@ export const TRANSFER_RESOURCE = (id: string): GateResource => ({
   rejectedStatus: "rejected",
 });
 
+interface FreezeBlock {
+  controlId: "RS-04" | "RS-05";
+  type: "account_frozen" | "institution_frozen";
+  subjectRef: string;
+  detail: string;
+}
+
+/** The RS-05 institution freeze and RS-04 account freezes, as runGate reads them. */
+async function freezeGate(
+  db: SupabaseClient,
+  sourceAccountId: string,
+  destAccountId: string | null,
+): Promise<FreezeBlock | null> {
+  const { data: inst, error: instErr } = await db.schema("core").from("institution_freeze")
+    .select("id")
+    .not("activated_at", "is", null)
+    .is("released_at", null)
+    .limit(1);
+  if (instErr) throw new Error(`institution_freeze lookup: ${instErr.message}`);
+  const instRow = (inst ?? [])[0] as { id: string } | undefined;
+  if (instRow) {
+    return {
+      controlId: "RS-05", type: "institution_frozen", subjectRef: instRow.id,
+      detail: "the institution is under a regulator-ordered freeze; no money moves on any rail until it is released",
+    };
+  }
+
+  const ids = destAccountId && destAccountId !== sourceAccountId
+    ? [sourceAccountId, destAccountId]
+    : [sourceAccountId];
+  const { data: freezes, error: frzErr } = await db.schema("core").from("account_freeze")
+    .select("id, account_ref, authority, blocks_debits, blocks_credits")
+    .in("account_ref", ids)
+    .is("released_at", null);
+  if (frzErr) throw new Error(`account_freeze lookup: ${frzErr.message}`);
+  const live = (freezes ?? []) as {
+    id: string; account_ref: string; authority: string; blocks_debits: boolean; blocks_credits: boolean;
+  }[];
+  const debit = live.find((f) => f.account_ref === sourceAccountId && f.blocks_debits === true);
+  if (debit) {
+    return {
+      controlId: "RS-04", type: "account_frozen", subjectRef: sourceAccountId,
+      detail: `the source account is frozen (${debit.authority}); debits are blocked until the freeze is released`,
+    };
+  }
+  const credit = destAccountId
+    ? live.find((f) => f.account_ref === destAccountId && f.blocks_credits === true)
+    : undefined;
+  if (credit) {
+    return {
+      controlId: "RS-04", type: "account_frozen", subjectRef: destAccountId!,
+      detail: `the destination account is frozen (${credit.authority}); credits to it are blocked until the freeze is released`,
+    };
+  }
+  return null;
+}
+
 export async function runGate(
   db: SupabaseClient,
   cfg: BlnkConfig,
@@ -182,6 +239,44 @@ export async function runGate(
         },
       };
     }
+  }
+
+  // RS-05 / RS-04: standing freezes stop the money. Both were recorded by
+  // resolution.ts and read by nothing on the rails, so a court-frozen account
+  // and a frozen institution kept moving money (caught by the resolution
+  // partner flow). An activated, unreleased institution freeze halts every
+  // movement on every rail. An account freeze that blocks debits refuses any
+  // movement OUT of the source; one that blocks credits (court order, OFAC,
+  // institution — NOT a garnishment or levy, which must let payroll land)
+  // refuses a movement INTO the destination when the rail names one.
+  const frozen = await freezeGate(db, sourceAccountId, destAccount?.id ?? null);
+  if (frozen) {
+    const { error: crErr } = await db.schema("core").from("control_result").insert({
+      id: `cr_${crypto.randomUUID()}`,
+      provenance: provenanceFor("core", ctx),
+      control_id: frozen.controlId,
+      decision: "block",
+      event: transferId,
+      subject_ref: frozen.subjectRef,
+    });
+    if (crErr) throw new Error(`control_result insert (${frozen.controlId} freeze): ${crErr.message}`);
+    const { error: rejErr } = await db.schema("core").from(resource.table)
+      .update({ status: resource.rejectedStatus })
+      .eq("id", transferId);
+    if (rejErr) throw new Error(`${resource.table} reject update (freeze): ${rejErr.message}`);
+    return {
+      blocked: true,
+      status: 423,
+      body: {
+        status: 423,
+        type: frozen.type,
+        title: frozen.type === "institution_frozen" ? "Institution Frozen" : "Account Frozen",
+        detail: frozen.detail,
+        doc_url: `https://api.cassandra.bank/docs/errors/${frozen.type.replace(/_/g, "-")}`,
+        resource_id: transferId,
+        resource_type: resource.type,
+      },
+    };
   }
 
   // CG-VEL-01 is a per-account DAILY cap, so it must aggregate every rail the

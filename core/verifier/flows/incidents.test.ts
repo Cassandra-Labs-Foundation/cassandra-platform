@@ -218,7 +218,7 @@ flow("incidents: sev1 data exposure → an assessment missing scope or impact is
       const said = ((await events(id)).get("incident.external_comms.recorded") ?? [])
         .map((e) => e.payload["comms.holding_statement"]);
       assert(said.includes("We are investigating an incident affecting online banking."), "first statement evidenced");
-      // DEFECT: postExternalComms emits under the fixed id evt_<incident>_extcomms with ignoreDuplicates, and overwrites comms_holding_statement on the row — a second statement that went out (200) leaves no event, and the row no longer holds the first, so neither record carries both
+      // Regression guard (fixed 2026-10-06): postExternalComms emitted under a fixed id with ignoreDuplicates, so a second statement left no event. Each statement now gets its own event; the row keeps the latest
       assert(said.includes("Online banking is restored; affected members will be contacted."),
         `follow-up statement evidenced (events hold: ${JSON.stringify(said)})`);
     });

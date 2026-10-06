@@ -24,10 +24,22 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const TRIAGE_DAYS = 2;
 const COMMITTEE_DAYS = 30;
 const REVIEW_DAYS = 30;
-/** ERM-07: a decision on an acceptance request within 10 days. */
-const ACCEPTANCE_DECISION_DAYS = 10;
+/**
+ * ERM-07: a decision on an acceptance request within 30 calendar days of the
+ * request ("`risk_acceptance.decision_due_at` (set to 30 calendar days from
+ * `risk_acceptance.requested`)"). It was 10 until 2026-10-06, a number no
+ * policy text supports.
+ */
+export const ACCEPTANCE_DECISION_DAYS = 30;
 /** ERM-07: warn this far ahead of expiry, so it can be revisited in time. */
 export const EXPIRY_ALERT_DAYS = 30;
+/**
+ * ERM-07: the SECOND, separate escalation (`risk_acceptance.expiry_warning`) —
+ * to the CCO and the owner, 7 days before expiry. It is its own threshold, not
+ * a duplicate of the 30-day alert: sent together, the 7-day escalation would
+ * fire 30 days out and never again, which is no escalation at all.
+ */
+export const EXPIRY_WARNING_DAYS = 7;
 
 /** ERM-06: severity from the size of the excursion relative to tolerance. */
 export function severityFor(excursion: number, tolerance: number): string {
@@ -339,6 +351,8 @@ export async function postRiskAcceptance(
     id, risk_id: body.risk_id,
     breach_id: isNonEmptyString(body.breach_id) ? body.breach_id : null,
     owner_id: body.owner_id, rationale: body.rationale,
+    // the requesting CREDENTIAL, so four-eyes compares who acted, not names
+    requested_by: ctx.tokenId,
     remediation_evidence: isNonEmptyString(body.remediation_evidence)
       ? body.remediation_evidence
       : null,
@@ -368,44 +382,66 @@ export async function postRiskAcceptance(
   return jsonResponse({ data: { id, expiry_alert_at: alertAt.toISOString() } }, 201, requestId);
 }
 
-/** POST /risk/acceptances/:id/decide {decision, decided_by} */
+/**
+ * POST /risk/acceptances/:id/decide {decision, decided_by?}
+ *
+ * ERM-07: acceptance decisions are the CCO's, for every risk level (user
+ * decision 2026-10-06: no separate CRO tier). The gate is the credential's
+ * `cco` role — any staff token could grant an acceptance before. The decider
+ * recorded is the CREDENTIAL (`ctx.tokenId`); the typed `decided_by` is kept
+ * only as a display label, because a typed name proves nothing about who acted.
+ * Four-eyes compares credentials: the credential that requested an acceptance
+ * cannot decide it.
+ */
 export async function postRiskAcceptanceDecision(
   req: Request, accId: string, db: SupabaseClient, requestId: string,
   ctx: PartnerContext, scope: EvidenceScope = "core",
 ): Promise<Response> {
   const denied = requireInternalActor(ctx, requestId);
   if (denied) return denied;
+  if (!ctx.roles.includes("cco")) {
+    return apiError(403, "insufficient_role", requestId, {
+      title: "Insufficient Role",
+      detail: `cco is required to decide a risk acceptance (ERM-07); this token carries ${
+        ctx.roles.length ? ctx.roles.join(", ") : "no such role"
+      }`,
+    });
+  }
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
   const { data: a } = await db.schema(scope).from("risk_acceptance")
-    .select("id, owner_id, decision_due_at, risk_id, expiry_date").eq("id", accId).maybeSingle();
+    .select("id, owner_id, requested_by, decision_due_at, risk_id, expiry_date")
+    .eq("id", accId).maybeSingle();
   if (!a) return notFoundResponse(requestId, "risk_acceptance", accId);
 
-  const decidedBy = isNonEmptyString(body.decided_by) ? body.decided_by : null;
-  if (!decidedBy || (body.decision !== "accepted" && body.decision !== "declined")) {
+  const label = isNonEmptyString(body.decided_by) ? body.decided_by : null;
+  if (body.decision !== "accepted" && body.decision !== "declined") {
     return validationError(requestId, [{
       type: "invalid_value", field: "decision",
-      message: "decision must be accepted or declined, with decided_by",
+      message: "decision must be accepted or declined",
     }]);
   }
-  if (decidedBy === a.owner_id) {
-    // The owner asking to carry a risk cannot be the one who grants it.
+  if (label === a.owner_id || (a.requested_by && a.requested_by === ctx.tokenId)) {
+    // The owner asking to carry a risk — or the credential that asked for
+    // it — cannot be the one who grants it.
     return apiError(409, "risk_acceptance_self_granted", requestId, {
       title: "self-granted acceptance",
-      detail: "the risk owner cannot grant their own acceptance",
+      detail: "the requester of a risk acceptance cannot decide it",
     });
   }
 
   const now = new Date();
   const { error } = await db.schema(scope).from("risk_acceptance").update({
-    decision: body.decision, decided_at: now.toISOString(), decided_by: decidedBy,
-    updated_at: now.toISOString(),
+    decision: body.decision, decided_at: now.toISOString(), decided_by: ctx.tokenId,
+    decided_by_label: label, updated_at: now.toISOString(),
   }).eq("id", accId);
   if (error) return internalErrorResponse(requestId, error.message);
 
   await emit(db, scope, `ev_${accId}_dec`, "risk_acceptance.decided",
     "risk_acceptance", accId, {
-      "risk_acceptance.id": accId, decision: body.decision, decided_by: decidedBy,
+      "risk_acceptance.id": accId, decision: body.decision,
+      decided_by: ctx.tokenId, decided_by_label: label, "user.id": ctx.tokenId,
+      "user.role": "cco",
       "risk_acceptance.expiry_date": a.expiry_date,
       decided_late: now.toISOString() > String(a.decision_due_at),
     }, ctx);
@@ -433,50 +469,172 @@ export async function postRiskAcceptanceSweep(
   const now = new Date();
   const iso = now.toISOString();
   const { data, error } = await db.schema(scope).from("risk_acceptance")
-    .select("id, risk_id, breach_id, owner_id, decision, expiry_date, expiry_alert_at, expiry_alerted_at, expired_at")
+    .select("id, risk_id, breach_id, owner_id, decision, expiry_date, expiry_alert_at, expiry_alerted_at, expiry_warned_at, expired_at")
     .is("expired_at", null)
     .order("expiry_date", { ascending: true })
     .limit(200);
   if (error) return internalErrorResponse(requestId, error.message);
 
-  let alerted = 0, expired = 0;
+  let alerted = 0, warned = 0, expired = 0;
   for (const a of data ?? []) {
     const id = String(a.id);
     const patch: Record<string, unknown> = { updated_at: iso };
+    const expiryMs = new Date(String(a.expiry_date)).getTime();
+    const daysRemaining = Math.ceil((expiryMs - now.getTime()) / DAY_MS);
 
     if (String(a.expiry_date) <= iso) {
+      // ERM-07: the lapse creates a breach RECORD for the associated risk, not
+      // only an event — an event leaves nothing to triage, present or review.
+      // If the record cannot be written the acceptance is NOT marked expired,
+      // so the next sweep retries instead of losing the lapse.
+      let breachId: string;
+      try {
+        breachId = await openLapseBreach(db, scope, a, now, ctx);
+      } catch (e) {
+        console.error(`risk acceptance ${id}: lapse breach not recorded: ${e}`);
+        await db.schema(scope).from("risk_acceptance").update(patch).eq("id", id);
+        continue;
+      }
       patch.expired_at = iso;
       expired++;
       await emit(db, scope, `ev_${id}_expired`, "risk_acceptance.expired",
         "risk_acceptance", id, {
           "risk_acceptance.id": id, "risk.id": a.risk_id,
           "risk_acceptance.expiry_date": a.expiry_date,
+          "risk_breach.id": breachId,
         }, ctx);
       // the risk is back outside appetite with nothing covering it
       await emit(db, scope, `ev_${id}_reopen`, "risk_breach.opened", "risk_acceptance", id, {
-        "risk_breach.id": a.breach_id ?? id, reason: "risk_acceptance_expired",
+        "risk_breach.id": breachId, reason: "risk_acceptance_expired",
+        "risk_acceptance.id": id, "risk.id": a.risk_id,
+        "risk_breach.prior_id": a.breach_id ?? null,
         "risk.owner_id": a.owner_id,
       }, ctx);
-    } else if (String(a.expiry_alert_at) <= iso && !a.expiry_alerted_at) {
-      patch.expiry_alerted_at = iso;
-      alerted++;
-      await emit(db, scope, `ev_${id}_alert`, "risk_acceptance.expiry_alerted",
-        "risk_acceptance", id, {
-          "risk_acceptance.id": id,
-          "risk_acceptance.expiry_date": a.expiry_date,
-          days_remaining: Math.ceil(
-            (new Date(String(a.expiry_date)).getTime() - now.getTime()) / DAY_MS,
-          ),
-        }, ctx);
-      await emit(db, scope, `ev_${id}_warn`, "risk_acceptance.expiry.warning",
-        "risk_acceptance", id, { "risk_acceptance.expiry_date": a.expiry_date }, ctx);
+    } else {
+      // Two thresholds, each judged on its own and each fired once. A sweep
+      // that missed the 30-day window and runs inside 7 days sends both,
+      // because both are owed; otherwise they arrive ~23 days apart.
+      if (String(a.expiry_alert_at) <= iso && !a.expiry_alerted_at) {
+        patch.expiry_alerted_at = iso;
+        alerted++;
+        await emit(db, scope, `ev_${id}_alert`, "risk_acceptance.expiry_alerted",
+          "risk_acceptance", id, {
+            "risk_acceptance.id": id,
+            "risk_acceptance.expiry_date": a.expiry_date,
+            "risk_acceptance.owner_id": a.owner_id,
+            threshold_days: EXPIRY_ALERT_DAYS,
+            days_remaining: daysRemaining,
+          }, ctx);
+      }
+      if (expiryMs - now.getTime() <= EXPIRY_WARNING_DAYS * DAY_MS && !a.expiry_warned_at) {
+        patch.expiry_warned_at = iso;
+        warned++;
+        await emit(db, scope, `ev_${id}_warn`, "risk_acceptance.expiry.warning",
+          "risk_acceptance", id, {
+            "risk_acceptance.id": id,
+            "risk_acceptance.expiry_date": a.expiry_date,
+            "risk_acceptance.owner_id": a.owner_id,
+            days_remaining: daysRemaining,
+          }, ctx);
+        // the escalation the warning produces: to the CCO as well as the owner
+        await emit(db, scope, `ev_${id}_warn_alert`, "risk_acceptance.expiry_alerted",
+          "risk_acceptance", id, {
+            "risk_acceptance.id": id,
+            "risk_acceptance.expiry_date": a.expiry_date,
+            "risk_acceptance.owner_id": a.owner_id,
+            threshold_days: EXPIRY_WARNING_DAYS,
+            days_remaining: daysRemaining,
+            escalated_to: ["cco", "owner"],
+          }, ctx);
+      }
     }
     // touched either way, so a bounded sweep cannot starve its tail
     await db.schema(scope).from("risk_acceptance").update(patch).eq("id", id);
   }
   return jsonResponse({
-    data: { examined: (data ?? []).length, alerted, expired },
+    data: { examined: (data ?? []).length, alerted, warned, expired },
   }, 200, requestId);
+}
+
+const SEVERITIES = ["low", "moderate", "high", "critical"];
+
+/** The register's free-text rating, mapped onto the breach severity scale. */
+function severityFromRating(rating: unknown): string | null {
+  const r = String(rating ?? "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
+  if (r === "very high") return "critical";
+  if (r === "medium") return "moderate";
+  if (r === "minor") return "low";
+  if (r === "major") return "high";
+  return SEVERITIES.includes(r) ? r : null;
+}
+
+/**
+ * ERM-07 lapse → breach. One `risk_breach` row per lapsed acceptance, keyed on
+ * the acceptance (deterministic id + a partial unique index on
+ * `risk_acceptance_id`), so a re-run sweep can never open a second one.
+ *
+ * The excursion is taken from the breach the acceptance was covering, when it
+ * names one — that is the last measured position of the risk. An acceptance
+ * that covered no recorded breach has no measurement to copy, and the row
+ * says so with NULL kri/tolerance/excursion (allowed only on a lapse row; see
+ * the migration) rather than inventing a KRI reading.
+ */
+async function openLapseBreach(
+  db: SupabaseClient, scope: EvidenceScope, a: Any, now: Date, ctx: PartnerContext,
+): Promise<string> {
+  const accId = String(a.id);
+  const id = `rbrch_lapse_${accId}`;
+
+  const prior: Any = a.breach_id
+    ? (await db.schema(scope).from("risk_breach")
+      .select("id, appetite_id, taxonomy_category_code, kri_value, tolerance_value, current_excursion, severity, residual_rating, impact_summary")
+      .eq("id", String(a.breach_id)).maybeSingle()).data
+    : null;
+  const risk: Any = (await db.schema(scope).from("risk")
+    .select("id, taxonomy_category_code, residual_rating")
+    .eq("id", String(a.risk_id)).maybeSingle()).data;
+  const appetite: Any = prior?.appetite_id
+    ? null
+    : (await db.schema(scope).from("risk_appetite")
+      .select("id, taxonomy_category_code")
+      .eq("risk_id", String(a.risk_id)).limit(1).maybeSingle()).data;
+
+  const severity = (prior?.severity as string | undefined) ??
+    severityFromRating(risk?.residual_rating) ??
+    // an unrated lapse is escalated rather than under-called
+    "high";
+  const row = {
+    id,
+    appetite_id: prior?.appetite_id ?? appetite?.id ?? null,
+    risk_id: a.risk_id,
+    risk_acceptance_id: accId,
+    taxonomy_category_code: prior?.taxonomy_category_code ??
+      risk?.taxonomy_category_code ?? appetite?.taxonomy_category_code ?? "unclassified",
+    kri_value: prior?.kri_value ?? null,
+    tolerance_value: prior?.tolerance_value ?? null,
+    current_excursion: prior?.current_excursion ?? null,
+    severity,
+    owner_id: a.owner_id,
+    residual_rating: prior?.residual_rating ?? risk?.residual_rating ?? null,
+    impact_summary: `risk acceptance ${accId} expired without renewal` +
+      (prior?.impact_summary ? `; ${prior.impact_summary}` : ""),
+    detected_at: now.toISOString(),
+    triage_due_at: plusDays(now, TRIAGE_DAYS),
+    committee_due_at: plusDays(now, COMMITTEE_DAYS),
+    review_due_at: plusDays(now, REVIEW_DAYS),
+    provenance: provenanceFor(scope, ctx),
+  };
+  const { error } = await db.schema(scope).from("risk_breach")
+    .upsert(row, { onConflict: "id", ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+
+  await emit(db, scope, `ev_${id}_triagedue`, "risk_breach.triage.due_at",
+    "risk_breach", id, { triage_due_at: row.triage_due_at }, ctx);
+  await emit(db, scope, `ev_${id}_commdue`, "risk_breach.committee_due_at",
+    "risk_breach", id, { committee_due_at: row.committee_due_at }, ctx);
+  await emit(db, scope, `ev_${id}_revdue`, "risk_breach.review.due_at",
+    "risk_breach", id, { review_due_at: row.review_due_at }, ctx);
+  return id;
 }
 
 // ------------------------------------------------------------ IC-06 overrides
@@ -541,7 +699,11 @@ export async function postControlOverride(
 /**
  * POST /controls/exceptions
  * {control_id, scope, rationale, approver_id, registered_by, expires_at,
- *  risk_acceptance_id?}
+ *  risk_acceptance_id}
+ *
+ * IC-06: a standing exception is registered with an expiry AND the risk
+ * acceptance that carries it (`exception.risk_acceptance`). Without one, the
+ * control is switched off with nobody having accepted the risk of it being off.
  */
 export async function postControlException(
   req: Request, db: SupabaseClient, requestId: string,
@@ -563,6 +725,12 @@ export async function postControlException(
       message: "a registered exception must be time-boxed",
     });
   }
+  if (!isNonEmptyString(body.risk_acceptance_id)) {
+    errors.push({
+      type: "missing_field", field: "risk_acceptance_id",
+      message: "a standing exception must reference the risk acceptance that carries it",
+    });
+  }
   if (errors.length > 0) return validationError(requestId, errors);
   if (body.approver_id === body.registered_by) {
     return apiError(409, "control_exception_self_approved", requestId, {
@@ -570,14 +738,18 @@ export async function postControlException(
       detail: "the person registering an exception cannot approve it",
     });
   }
+  const { data: acceptance, error: accErr } = await db.schema(scope).from("risk_acceptance")
+    .select("id").eq("id", String(body.risk_acceptance_id)).maybeSingle();
+  if (accErr) return internalErrorResponse(requestId, accErr.message);
+  if (!acceptance) {
+    return notFoundResponse(requestId, "risk_acceptance", String(body.risk_acceptance_id));
+  }
 
   const now = new Date();
   const id = `cexc_${crypto.randomUUID()}`;
   const { error } = await db.schema(scope).from("control_exception").upsert({
     id, control_id: body.control_id, scope: body.scope, rationale: body.rationale,
-    risk_acceptance_id: isNonEmptyString(body.risk_acceptance_id)
-      ? body.risk_acceptance_id
-      : null,
+    risk_acceptance_id: body.risk_acceptance_id,
     approver_id: body.approver_id, registered_by: body.registered_by,
     registered_at: now.toISOString(), expires_at: body.expires_at,
     provenance: provenanceFor(scope, ctx),
@@ -589,7 +761,7 @@ export async function postControlException(
     "exception.rationale": body.rationale,
     "exception.approver_id": body.approver_id,
     "exception.expires_at": body.expires_at,
-    "exception.risk_acceptance": body.risk_acceptance_id ?? null,
+    "exception.risk_acceptance": body.risk_acceptance_id,
     "user.id": body.registered_by,
   }, ctx);
   return jsonResponse({ data: { id } }, 201, requestId);

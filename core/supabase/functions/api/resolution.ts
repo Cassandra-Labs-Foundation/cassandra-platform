@@ -7,11 +7,14 @@
 // order rather than making records disposal-eligible.
 
 import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  type BlnkConfig, BlnkError, blnkConfigFromEnv, getBalance, recordTransaction,
+} from "../_shared/blnk.ts";
 import { type PartnerContext } from "./auth.ts";
 import { type EvidenceScope, provenanceFor } from "./bsa.ts";
 import {
-  internalErrorResponse, isNonEmptyString, jsonResponse, notFoundResponse,
-  parseJsonBody, validationError,
+  apiError, bankErrorResponse, internalErrorResponse, isNonEmptyString, jsonResponse,
+  notFoundResponse, parseJsonBody, validationError,
 } from "./lib.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -31,6 +34,24 @@ export const FREEZE_PRECEDENCE: Record<string, number> = {
   fraud_hold: 60,
   member_request: 70,
 };
+
+/** Authorities whose freeze must name the legal process compelling it. */
+const LEGAL_AUTHORITIES = ["court_order", "garnishment", "tax_levy"];
+
+/** An id-safe rendering of an order / legal-process reference. */
+const idPart = (v: string) => v.replace(/[^A-Za-z0-9._-]+/g, "-");
+
+/**
+ * One freeze per (account, authority, ORDER). The id used to be
+ * frz_<account>_<authority>, so a second garnishment under a different legal
+ * process upserted over the first — the first order vanished, and releasing
+ * "the" garnishment released both (the legal-hold bug again; caught by the
+ * resolution partner flow). The order reference is part of the identity: the
+ * legal process for court process, the order reference otherwise.
+ */
+export function freezeIdFor(accountRef: string, authority: string, reference: string | null): string {
+  return `frz_${accountRef}_${authority}${reference ? `_${idPart(reference)}` : ""}`;
+}
 
 /** Which freezes permit credits. A garnishment must not bounce payroll. */
 const BLOCKS_CREDITS: Record<string, boolean> = {
@@ -70,9 +91,10 @@ async function emit(
 async function recomputeFreezeState(
   db: SupabaseClient, scope: EvidenceScope, accountRef: string,
 ): Promise<{ debits: boolean; credits: boolean; count: number; winner: string | null }> {
-  const { data: rows } = await db.schema(scope).from("account_freeze")
+  const { data: rows, error: readErr } = await db.schema(scope).from("account_freeze")
     .select("id, authority, precedence, blocks_debits, blocks_credits, released_at, account_ref")
     .eq("account_ref", accountRef);
+  if (readErr) throw new Error(`account_freeze read: ${readErr.message}`);
   const live = (rows ?? []).filter((r: Any) => r.released_at == null);
   const debits = live.some((r: Any) => r.blocks_debits === true);
   const credits = live.some((r: Any) => r.blocks_credits === true);
@@ -80,9 +102,10 @@ async function recomputeFreezeState(
     ? live.slice().sort((a: Any, b: Any) => Number(a.precedence) - Number(b.precedence))[0]
       .authority as string
     : null;
-  await db.schema(scope).from("account").update({
+  const { error: updErr } = await db.schema(scope).from("account").update({
     debits_blocked: debits, credits_blocked: credits, active_freeze_count: live.length,
   }).eq("id", accountRef);
+  if (updErr) throw new Error(`account freeze-state update: ${updErr.message}`);
   return { debits, credits, count: live.length, winner };
 }
 
@@ -104,8 +127,7 @@ export async function postAccountFreeze(
       message: `authority must be one of ${Object.keys(FREEZE_PRECEDENCE).join("/")}`,
     }]);
   }
-  const legalAuthorities = ["court_order", "garnishment", "tax_levy"];
-  if (legalAuthorities.includes(authority) && !isNonEmptyString(body.legal_process_reference)) {
+  if (LEGAL_AUTHORITIES.includes(authority) && !isNonEmptyString(body.legal_process_reference)) {
     // A freeze under legal compulsion must name the process compelling it, or
     // nobody can later show it was lawful rather than arbitrary.
     return validationError(requestId, [{
@@ -113,8 +135,18 @@ export async function postAccountFreeze(
       message: "a freeze under legal process must name the process",
     }]);
   }
+  // A freeze on an account that does not exist froze nothing, and answering
+  // 201 told legal it had (caught by the resolution partner flow).
+  const { data: acct, error: acctErr } = await db.schema(scope).from("account")
+    .select("id").eq("id", body.account_ref).maybeSingle();
+  if (acctErr) return internalErrorResponse(requestId, acctErr.message);
+  if (!acct) return notFoundResponse(requestId, "account", String(body.account_ref));
+
   const now = new Date();
-  const id = `frz_${body.account_ref}_${authority}`;
+  const reference = LEGAL_AUTHORITIES.includes(authority)
+    ? String(body.legal_process_reference)
+    : isNonEmptyString(body.order_reference) ? body.order_reference : null;
+  const id = freezeIdFor(String(body.account_ref), authority, reference);
   const { error } = await db.schema(scope).from("account_freeze").upsert({
     id, account_ref: body.account_ref, authority,
     precedence: FREEZE_PRECEDENCE[authority],
@@ -196,14 +228,37 @@ export async function postFreezeRelease(
   }, 200, requestId);
 }
 
-/** POST /resolution/freezes/:id/credit {amount_cents} — a credit against a freeze. */
+/**
+ * POST /resolution/accounts/:accountRef/credit {amount_cents, credit_reference?}
+ * — a credit to an account under freeze.
+ *
+ * The credit is POSTED TO THE LEDGER. This handler used to emit
+ * account_freeze.credit.posted and answer posted:true while no money moved
+ * (caught by the resolution partner flow). The Blnk move comes first, from the
+ * external @ResolutionCredits balance, under a deterministic reference
+ * (account:<id>:freeze_credit:<key>, key = Idempotency-Key, else
+ * credit_reference) so a retry dedupes instead of crediting twice; only then
+ * is it evidenced as posted. `cfg` is injected by tests and the drill; the
+ * routed handler reads it from the environment.
+ */
 export async function postFrozenAccountCredit(
   req: Request, accountRef: string, db: SupabaseClient, requestId: string,
-  ctx: PartnerContext, scope: EvidenceScope = "core",
+  ctx: PartnerContext, scope: EvidenceScope = "core", cfg?: BlnkConfig,
 ): Promise<Response> {
   const denied = requireInternalActor(ctx, requestId);
   if (denied) return denied;
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
+
+  const amount = body.amount_cents;
+  if (typeof amount !== "number" || !Number.isInteger(amount) || amount <= 0) {
+    return validationError(requestId, [{
+      type: "invalid_value", field: "amount_cents", message: "must be a positive integer number of cents",
+    }]);
+  }
+  const { data: acct, error: acctErr } = await db.schema(scope).from("account")
+    .select("id, blnk_balance_id").eq("id", accountRef).maybeSingle();
+  if (acctErr) return internalErrorResponse(requestId, acctErr.message);
+  if (!acct) return notFoundResponse(requestId, "account", accountRef);
 
   const state = await recomputeFreezeState(db, scope, accountRef);
   if (state.credits) {
@@ -214,12 +269,51 @@ export async function postFrozenAccountCredit(
   // A garnishment stops debits and PERMITS credits. Posting the member's
   // payroll while their account is frozen for a garnishment is correct
   // behaviour, not a leak, and it is the case a boolean flag gets wrong.
-  await emit(db, scope, `ev_frz_${accountRef}_cr`, "account_freeze.credit.posted",
+  const key = req.headers.get("Idempotency-Key") ??
+    (isNonEmptyString(body.credit_reference) ? body.credit_reference : requestId);
+  const creditId = `frzcr_${accountRef}_${idPart(key)}`;
+  let deduped = false;
+  if (scope === "core") {
+    if (!isNonEmptyString(acct.blnk_balance_id)) {
+      return apiError(409, "no_ledger_balance", requestId, {
+        detail: "this account has no ledger balance, so there is nothing to post the credit to",
+        resourceId: accountRef, resourceType: "account",
+      });
+    }
+    const ledger = cfg ?? blnkConfigFromEnv();
+    try {
+      const rec = await recordTransaction(ledger, {
+        coreResource: { table: "account", id: accountRef },
+        leg: `freeze_credit:${idPart(key)}`,
+        amountCents: amount,
+        currency: "USD",
+        source: "@ResolutionCredits",
+        destination: acct.blnk_balance_id,
+        description: `credit to frozen account ${accountRef}`,
+        allowOverdraft: true,
+      });
+      deduped = rec.deduped;
+      const bal = await getBalance(ledger, acct.blnk_balance_id);
+      if (typeof bal.balance === "number") {
+        const { error: mirrorErr } = await db.schema("core").from("account")
+          .update({ balance: bal.balance, balance_synced_at: new Date().toISOString() })
+          .eq("id", accountRef);
+        if (mirrorErr) console.error(`frozen-credit mirror refresh (${accountRef}): ${mirrorErr.message}`);
+      }
+    } catch (e) {
+      if (e instanceof BlnkError) return bankErrorResponse(requestId);
+      throw e;
+    }
+  }
+  // One event per credit (not one per account for its whole life).
+  await emit(db, scope, `ev_${creditId}`, "account_freeze.credit.posted",
     "account", accountRef, {
-      amount_cents: body.amount_cents ?? 0, governing_authority: state.winner,
+      amount_cents: amount, credit_id: creditId, governing_authority: state.winner,
       debits_blocked: state.debits, credits_blocked: state.credits,
     }, ctx);
-  return jsonResponse({ data: { posted: true, governing: state.winner } }, 201, requestId);
+  return jsonResponse({
+    data: { id: creditId, posted: true, amount_cents: amount, governing: state.winner, deduped },
+  }, 201, requestId);
 }
 
 // ------------------------------------------------------------------ RS-05
@@ -255,6 +349,8 @@ export async function postInstitutionFreeze(
     id, institution_freeze_order_reference: body.order_reference,
     ordered_by: body.ordered_by, ordered_at: now.toISOString(),
     activated_at: activate ? now.toISOString() : null,
+    // a re-activation of a previously released order is a NEW activation
+    ...(activate ? { released_at: null } : {}),
     activation_evidence: (body.activation_evidence ?? null) as Any,
     institution_freeze_notice_template_id: publish ? body.notice_template_id : null,
     notice_published_at: publish ? now.toISOString() : null,
@@ -298,6 +394,56 @@ export async function postInstitutionFreeze(
   return jsonResponse({ data: { id, activated: activate, notice_published: publish } }, 201, requestId);
 }
 
+/**
+ * POST /resolution/institution-freeze/{id}/release {release_reference, released_by}
+ *
+ * RS-05: the only way an ordered institution-wide freeze ends. While a freeze
+ * is active and unreleased the payment gate (transfers.ts freezeGate) refuses
+ * every movement on every rail, so a freeze with no release path would halt
+ * the institution forever — which is exactly what the compliance drill's
+ * NCUA-ORD-1 did on the live core once the gate started enforcing it. Lifting
+ * an ordered freeze is a CCO decision and names the authority's release.
+ */
+export async function postInstitutionFreezeRelease(
+  req: Request, freezeId: string, db: SupabaseClient, requestId: string,
+  ctx: PartnerContext, scope: EvidenceScope = "core",
+): Promise<Response> {
+  const denied = requireInternalActor(ctx, requestId);
+  if (denied) return denied;
+  if (!ctx.roles.includes("cco")) {
+    return apiError(403, "insufficient_role", requestId, {
+      title: "Insufficient Role",
+      detail: "releasing an institution-wide freeze requires the CCO (RS-05)",
+    });
+  }
+  const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
+  if (!isNonEmptyString(body.release_reference)) {
+    return validationError(requestId, [{
+      type: "missing_field", field: "release_reference",
+      message: "a freeze is lifted by the ordering authority's release — name it",
+    }]);
+  }
+  const { data: frz, error: selErr } = await db.schema(scope).from("institution_freeze")
+    .select("id, activated_at, released_at").eq("id", freezeId).maybeSingle();
+  if (selErr) return internalErrorResponse(requestId, selErr.message);
+  if (!frz) return notFoundResponse(requestId, "institution_freeze", freezeId);
+  if (frz.released_at) {
+    return jsonResponse({ data: { id: freezeId, released_at: frz.released_at } }, 200, requestId,
+      { "Idempotent-Replayed": "true" });
+  }
+  const now = new Date().toISOString();
+  const { error } = await db.schema(scope).from("institution_freeze")
+    .update({ released_at: now }).eq("id", freezeId).is("released_at", null);
+  if (error) return internalErrorResponse(requestId, error.message);
+  await emit(db, scope, `ev_${freezeId}_rel_${crypto.randomUUID()}`, "institution_freeze.released",
+    "institution_freeze", freezeId, {
+      release_reference: body.release_reference,
+      released_by: isNonEmptyString(body.released_by) ? body.released_by : null,
+      released_by_token: ctx.tokenId,
+    }, ctx);
+  return jsonResponse({ data: { id: freezeId, released_at: now } }, 200, requestId);
+}
+
 // ------------------------------------------------------------------ RS-06
 
 /** POST /resolution/member-portal {core_unavailable, claims_template_id, snapshot_as_of} */
@@ -310,6 +456,14 @@ export async function postMemberPortalState(
   const body = (await parseJsonBody(req).catch(() => null)) as Record<string, unknown> ?? {};
 
   const activate = body.activate !== false;
+  if (!activate && !ctx.roles.includes("cco")) {
+    // RS-06: leaving read-only mode "requires explicit CCO authorization".
+    // This used to accept any internal credential (caught by the resolution
+    // partner flow).
+    return apiError(403, "forbidden", requestId, {
+      detail: "deactivating read-only member access requires the CCO (RS-06)",
+    });
+  }
   if (activate && !isNonEmptyString(body.snapshot_as_of)) {
     // RS-06 promises next-business-day availability. Read-only access serving
     // live balances from a core that is DOWN serves nothing — it has to serve a
@@ -332,12 +486,20 @@ export async function postMemberPortalState(
   }, { onConflict: "id" });
   if (error) return internalErrorResponse(requestId, error.message);
 
+  // Every switch is its own event. The id used to be the constant
+  // `ev_portal_ro` (with ignoreDuplicates), so only the instance's first
+  // activation was ever evidenced (caught by the resolution partner flow).
   if (activate) {
-    await emit(db, scope, `ev_portal_ro`, "member_portal.readonly.activated",
+    await emit(db, scope, `ev_portal_ro_on_${crypto.randomUUID()}`, "member_portal.readonly.activated",
       "member_portal_state", "portal", {
         "member_portal.core_unavailable": body.core_unavailable === true,
         "member_portal.claims_template_id": body.claims_template_id ?? null,
         snapshot_as_of: body.snapshot_as_of,
+      }, ctx);
+  } else {
+    await emit(db, scope, `ev_portal_ro_off_${crypto.randomUUID()}`, "member_portal.readonly.disabled",
+      "member_portal_state", "portal", {
+        authorized_by: ctx.tokenId, authorized_role: "cco",
       }, ctx);
   }
   return jsonResponse({ data: { activated: activate } }, 201, requestId);
@@ -530,8 +692,28 @@ export async function postRecordsPackage(
   }
   const now = new Date();
   const id = `recpkg_${body.manifest_id}`;
-  await db.schema(scope).from("records_package").upsert({
-    id, records_package_manifest_id: body.manifest_id,
+
+  // A COMPLETED package is sealed: write-once. This used to upsert by manifest
+  // with no check, so a resubmission reprocessed a sealed package and logged a
+  // verification failure against it (caught by the resolution partner flow).
+  const { data: existing, error: readErr } = await db.schema(scope).from("records_package")
+    .select("id, completed_at").eq("id", id).maybeSingle();
+  if (readErr) return internalErrorResponse(requestId, readErr.message);
+  if (existing?.completed_at) return sealedResponse(requestId, id);
+
+  // core.records_package is shared with the cash-ops exam exports, which made
+  // purpose / scope / requested_at NOT NULL. This writer set none of them and
+  // ignored the upsert error, so no RS-08 package was ever stored while the
+  // API answered verified:true. Every write below is checked.
+  const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];
+  const { error: upErr } = await db.schema(scope).from("records_package").upsert({
+    id, purpose: "resolution",
+    scope: {
+      manifest_id: body.manifest_id, snapshot_id: body.snapshot_id ?? null,
+      snapshot_as_of: body.snapshot_as_of ?? null, artifact_id: body.artifact_id ?? null,
+    },
+    item_count: artifacts.length, requested_at: now.toISOString(),
+    records_package_manifest_id: body.manifest_id,
     records_package_snapshot_id: isNonEmptyString(body.snapshot_id) ? body.snapshot_id : null,
     records_package_snapshot_as_of: isNonEmptyString(body.snapshot_as_of)
       ? body.snapshot_as_of
@@ -542,6 +724,7 @@ export async function postRecordsPackage(
     records_package_artifact_id: isNonEmptyString(body.artifact_id) ? body.artifact_id : null,
     build_started_at: now.toISOString(), provenance: provenanceFor(scope, ctx),
   }, { onConflict: "id" });
+  if (upErr) return internalErrorResponse(requestId, upErr.message);
 
   const payload = {
     "records_package.manifest_id": body.manifest_id,
@@ -550,7 +733,7 @@ export async function postRecordsPackage(
     "records_package.snapshot_schedule": body.snapshot_schedule ?? "nightly",
     "records_package.artifact_id": body.artifact_id ?? null,
   };
-  await emit(db, scope, `ev_${id}_start`, "records_package.build.started",
+  await emit(db, scope, `ev_${id}_start_${crypto.randomUUID()}`, "records_package.build.started",
     "records_package", id, payload, ctx);
 
   // The integrity claim is a CHECKSUM CHAIN, not a status column. "Completed"
@@ -564,22 +747,30 @@ export async function postRecordsPackage(
     const reason = chain == null
       ? "no checksum chain produced"
       : `chain root ${chain.root} does not match the expected ${expected}`;
-    await db.schema(scope).from("records_package").update({
+    const { error: failErr } = await db.schema(scope).from("records_package").update({
       records_package_checksum_chain: chain,
       verification_failed_at: now.toISOString(),
       records_package_failure_reason: reason,
-    }).eq("id", id);
+    }).eq("id", id).is("completed_at", null);
+    if (failErr) return packageWriteError(requestId, id, failErr.message);
     // Completed and failed are mutually exclusive: a package that verified
     // badly and is still marked complete is the worst outcome here, because the
     // receiver trusts it.
-    await emit(db, scope, `ev_${id}_fail`, "records_package.verification.failed",
+    await emit(db, scope, `ev_${id}_fail_${crypto.randomUUID()}`, "records_package.verification.failed",
       "records_package", id, { ...payload, "records_package.failure_reason": reason }, ctx);
     return jsonResponse({ data: { id, verified: false, reason } }, 200, requestId);
   }
 
-  await db.schema(scope).from("records_package").update({
+  // A rebuild of a FAILED package that now verifies completes it. The failure
+  // stamp is cleared in the same write (ck_package_not_both forbids both); the
+  // failure itself stays on record as its records_package.verification.failed
+  // event. `.is("completed_at", null)` keeps a concurrently sealed package
+  // untouched.
+  const { error: doneErr } = await db.schema(scope).from("records_package").update({
     records_package_checksum_chain: chain, completed_at: now.toISOString(),
-  }).eq("id", id);
+    verification_failed_at: null, records_package_failure_reason: null,
+  }).eq("id", id).is("completed_at", null);
+  if (doneErr) return packageWriteError(requestId, id, doneErr.message);
   await emit(db, scope, `ev_${id}_snap`, "records_package.snapshot.completed",
     "records_package", id, payload, ctx);
   await emit(db, scope, `ev_${id}_done`, "records_package.completed",
@@ -587,4 +778,17 @@ export async function postRecordsPackage(
       ...payload, "records_package.checksum_chain": chain,
     }, ctx);
   return jsonResponse({ data: { id, verified: true } }, 201, requestId);
+}
+
+function sealedResponse(requestId: string, id: string): Response {
+  return apiError(409, "records_package_sealed", requestId, {
+    detail: "this records package is completed and sealed; a sealed package is write-once",
+    resourceId: id, resourceType: "records_package",
+  });
+}
+
+/** ck_package_not_both is a conflict with the package's state, not a server fault. */
+function packageWriteError(requestId: string, id: string, message: string): Response {
+  if (message.includes("ck_package_not_both")) return sealedResponse(requestId, id);
+  return internalErrorResponse(requestId, message);
 }

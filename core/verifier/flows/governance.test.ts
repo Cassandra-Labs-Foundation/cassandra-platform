@@ -185,8 +185,8 @@ flow("governance: staff register a quarterly obligation → the sweep fires its 
       assertEq(res.status, 200, `sweep (${body(res)})`);
       const fired = (res.body.fired as Any[]).find((f) => f.id === id);
       assertEq(day(fired?.due_at), "2025-04-01", "the April cycle opened");
-      // DEFECT: governance.ts postCalendarSweep tests `last_completed_at < due_at`, so completing the
-      // January cycle late (today) hides the April cycle — 18 months past due, never done — from the overdue list.
+      // Regression guard (fixed 2026-10-06): postCalendarSweep tested `last_completed_at < due_at`, so completing
+      // the January cycle late (today) hid the April cycle — past due, never done. Overdue is now per due cycle.
       assert((res.body.overdue as Any[]).some((o) => o.id === id),
         "the April 2025 cycle is past due with no completion against it, so it is overdue");
     });
@@ -270,12 +270,13 @@ flow("governance: an obligation registered with no anchor is reported UNSCHEDULE
       assertEq((await completions(adhoc)).length, 1, "logged");
     });
 
-    await t.step("a COMPLETED ad_hoc obligation is not reported as 'unscheduled … NOT satisfied'", async () => {
+    await t.step("a COMPLETED ad_hoc obligation keeps being flagged as unscheduled, prompting staff to decide whether it recurs", async () => {
       const b = await sweep();
-      // DEFECT (judgement call on ad_hoc semantics): governance.ts postObligationComplete nulls the anchor of a
-      // completed ad_hoc obligation, so the sweep lists it under `unscheduled` with a warning that it is "NOT satisfied".
-      assert(!(b.unscheduled as Any[]).some((u) => u.id === adhoc),
-        "a satisfied one-off obligation is reported as never scheduled and not satisfied");
+      // Decided 2026-10-06 (user): completing a one-off clears its schedule and the
+      // sweep keeps listing it under `unscheduled` as a prompt for staff to decide
+      // whether it recurs. This step pins that decision.
+      assert((b.unscheduled as Any[]).some((u) => u.id === adhoc),
+        "a completed one-off obligation is still listed as unscheduled");
     });
   } finally {
     await cleanup(created);

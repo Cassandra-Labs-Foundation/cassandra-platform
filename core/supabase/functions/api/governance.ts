@@ -324,8 +324,8 @@ export async function postObligationComplete(
  * Fires the catalogue's own trigger event for every obligation that has come
  * due, and separately reports the two absences:
  *
- *   OVERDUE     came due, nobody completed it. Produces no event of its own,
- *               because nothing happened.
+ *   OVERDUE     the CURRENT cycle came due and nobody completed that cycle
+ *               (a late completion of an earlier cycle does not count).
  *   UNSCHEDULED registered but never anchored, so it can never come due at all.
  *               The more dangerous of the two, because an unscheduled
  *               obligation looks exactly like a satisfied one from a distance.
@@ -350,8 +350,25 @@ export async function postCalendarSweep(
     .order("next_due_at", { ascending: true })
     .limit(SWEEP_LIMIT);
   if (error) return internalErrorResponse(requestId, error);
+  const dueRows = (data ?? []) as unknown as Record<string, unknown>[];
 
-  for (const r of (data ?? []) as unknown as Record<string, unknown>[]) {
+  // Overdue is judged PER DUE CYCLE: the cycle due at `next_due_at` has passed
+  // and there is no completion logged AGAINST THAT CYCLE. `last_completed_at`
+  // is not evidence for it — completing the January cycle late (today) says
+  // nothing about the April cycle, and comparing the two timestamps hid an
+  // April cycle 18 months past due. The completion log is keyed per cycle
+  // (`oblcomp_<obligation>_<due day>`), so one batched read answers it.
+  const cycleKey = (id: string, dueAt: string) => `oblcomp_${id}_${dueAt.slice(0, 10)}`;
+  const completedCycles = new Set<string>();
+  if (dueRows.length) {
+    const { data: done, error: cErr } = await db.schema(scope).from("obligation_completion")
+      .select("id")
+      .in("id", dueRows.map((r) => cycleKey(String(r.id), String(r.next_due_at))));
+    if (cErr) return internalErrorResponse(requestId, cErr);
+    for (const c of (done ?? []) as unknown as { id: string }[]) completedCycles.add(String(c.id));
+  }
+
+  for (const r of dueRows) {
     const id = String(r.id);
     const dueAt = String(r.next_due_at);
     const dueDay = dueAt.slice(0, 10);
@@ -364,8 +381,8 @@ export async function postCalendarSweep(
       );
       fired.push({ id, trigger_code: String(r.trigger_code), due_at: dueAt });
 
-      const lastCompleted = r.last_completed_at ? new Date(String(r.last_completed_at)) : null;
-      const isOverdue = !lastCompleted || lastCompleted < new Date(dueAt);
+      const isOverdue = Date.parse(dueAt) < Date.parse(nowIso) &&
+        !completedCycles.has(cycleKey(id, dueAt));
       if (isOverdue) {
         const daysLate = Math.floor(
           (Date.parse(nowIso) - Date.parse(dueAt)) / 86_400_000,
@@ -411,7 +428,7 @@ export async function postCalendarSweep(
           `when their cycle starts (OQ-15)`,
       }
       : {}),
-    truncated: ((data ?? []) as unknown[]).length >= SWEEP_LIMIT,
+    truncated: dueRows.length >= SWEEP_LIMIT,
   }, 200, requestId);
 }
 

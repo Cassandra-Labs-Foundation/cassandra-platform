@@ -4934,6 +4934,27 @@ paths:
       x-audience: internal
       x-handler: resolution.postInstitutionFreeze
       x-tier: write
+  /resolution/institution-freeze/{id}/release:
+    post:
+      summary: RS-05 lift an institution-wide freeze when the ordering authority releases it
+      operationId: post_institution_freeze_release
+      description: Records the release of an institution-wide freeze (released_at), naming the release order. While a freeze
+        is active and unreleased the payment gate refuses every movement on every rail, so this is the only way an ordered
+        freeze ends. Requires the cco role; partners get 404.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        2XX:
+          description: Success. Response contract not yet authored — the handler is the contract; see x-handler.
+        4XX:
+          description: Validation, authorization, or not-found per the standard error envelope.
+      x-audience: internal
+      x-handler: resolution.postInstitutionFreezeRelease
+      x-tier: write
   /resolution/member-portal:
     post:
       summary: POST /resolution/member-portal
@@ -59358,6 +59379,9 @@ x-events:
   institution_freeze.activation_evidence:
     subject: institution_freeze
     type: recorded
+  institution_freeze.released:
+    subject: institution_freeze
+    type: released
   institution_freeze.inflight_reconciled:
     subject: institution_freeze
     type: reconciled
@@ -59754,6 +59778,9 @@ x-events:
   member_portal.readonly_activated:
     subject: member_portal
     type: activated
+  member_portal.readonly_disabled:
+    subject: member_portal
+    type: disabled
   member_portal.snapshot_served:
     subject: member_portal
     type: recorded

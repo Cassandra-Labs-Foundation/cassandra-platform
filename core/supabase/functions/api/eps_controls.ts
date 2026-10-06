@@ -83,14 +83,27 @@ export async function postAuthEvent(
   }
 
   const now = new Date().toISOString();
-  const id = `epsauth_${subject}_${failureCount}_${outcome}`;
-  const { data, error } = await db.schema(scope).from("eps_auth_event").upsert({
+  // Every attempt is its own record, keyed by its place in the subject's
+  // chain. Until 2026-10-06 the id was epsauth_<subject>_<failure_count>_<outcome>,
+  // so a later attempt with the same count (fail,fail,success,FAIL) upserted
+  // over the first and its events were dropped as duplicates — the audit trail
+  // lost attempts. INSERT, not upsert: two concurrent attempts that read the
+  // same prior chain_seq collide loudly instead of one erasing the other.
+  const id = `epsauth_${subject}_${chainSeq}`;
+  const { data, error } = await db.schema(scope).from("eps_auth_event").insert({
     id, subject_ref: subject, channel, decision, failure_count: failureCount,
     chain_seq: chainSeq, challenge_method: challengeMethod,
     locked_out_at: decision === "locked_out" ? now : null,
     provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" }).select("id, subject_ref, decision, failure_count").maybeSingle();
-  if (error) return internalErrorResponse(requestId, error.message);
+  }).select("id, subject_ref, decision, failure_count").maybeSingle();
+  if (error) {
+    if ((error as { code?: string }).code === "23505") {
+      return apiError(409, "concurrent_auth_attempt", requestId, {
+        detail: "another attempt for this subject was recorded concurrently; retry",
+      });
+    }
+    return internalErrorResponse(requestId, error.message);
+  }
 
   await emit(db, scope, `ev_${id}_dec`, "eps.auth.decided", "eps_auth", id, { decision }, ctx);
   await emit(db, scope, `ev_${id}_cnt`, "eps.auth.failure_count", "eps_auth", id, {
@@ -126,21 +139,37 @@ export async function postCardControl(
     }]);
   }
 
-  const { data: priorRows } = await db.schema(scope).from("eps_card_control")
-    .select("id, card_ref, control_type, new_value")
+  // The prior state is the latest application by control_seq — a per
+  // (card, control) monotonic sequence, the same shape as eps_auth_event's
+  // chain_seq. Until 2026-10-06 rows were keyed epscc_<card>_<type>_<value>
+  // and the prior read ordered by created_at, which an upsert never advances:
+  // on,off,on,OFF read the old 'off' row as the latest and reported no change.
+  const { data: priorRows, error: priorErr } = await db.schema(scope).from("eps_card_control")
+    .select("id, card_ref, control_type, new_value, control_seq")
     .eq("card_ref", cardRef).eq("control_type", controlType)
-    .order("created_at", { ascending: false }).limit(1);
+    .order("control_seq", { ascending: false }).limit(1);
+  if (priorErr) return internalErrorResponse(requestId, priorErr.message);
   const prior = ((priorRows ?? []) as unknown as Array<Record<string, unknown>>)[0];
   const previousValue = typeof prior?.new_value === "string" ? prior.new_value : null;
+  const priorSeq = typeof prior?.control_seq === "number" ? prior.control_seq : 0;
+  const controlSeq = priorSeq + 1;
 
-  const id = `epscc_${cardRef}_${controlType}_${newValue}`;
-  const { data, error } = await db.schema(scope).from("eps_card_control").upsert({
+  // Each application is its own row and its own events. INSERT, not upsert:
+  // a concurrent toggle that read the same prior collides instead of erasing.
+  const id = `epscc_${cardRef}_${controlType}_${controlSeq}`;
+  const { data, error } = await db.schema(scope).from("eps_card_control").insert({
     id, card_ref: cardRef, control_type: controlType, applied_by: appliedBy,
-    previous_value: previousValue, new_value: newValue,
+    previous_value: previousValue, new_value: newValue, control_seq: controlSeq,
     provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" }).select("id, card_ref, control_type, previous_value, new_value")
-    .maybeSingle();
-  if (error) return internalErrorResponse(requestId, error.message);
+  }).select("id, card_ref, control_type, previous_value, new_value").maybeSingle();
+  if (error) {
+    if ((error as { code?: string }).code === "23505") {
+      return apiError(409, "concurrent_card_control", requestId, {
+        detail: "another change to this control was recorded concurrently; retry",
+      });
+    }
+    return internalErrorResponse(requestId, error.message);
+  }
 
   await emit(db, scope, `ev_${id}_app`, "eps.card_control.applied", "eps_card_control", id, {
     control_type: controlType, new_value: newValue,

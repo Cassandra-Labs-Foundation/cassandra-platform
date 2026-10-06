@@ -1568,13 +1568,19 @@ async function runRiskExceptionsLifecycle(env: FireEnv): Promise<void> {
     env.db, "d", ops,
   );
   const acc = (env.rows["core.risk_acceptance"] ?? [])[0];
+  // ERM-07: decisions are the CCO's (role-gated, attributed to the credential)
+  const cco = { ...ops, tokenId: "tok_cco", roles: ["cco" as const] };
+  // NEGATIVE: a staff credential without the cco role cannot decide
+  await postRiskAcceptanceDecision(
+    R({ decision: "accepted", decided_by: "board_chair" }), String(acc?.id ?? "x"), env.db, "d", ops,
+  );
   // NEGATIVE: the owner cannot grant their own acceptance
   await postRiskAcceptanceDecision(
-    R({ decision: "accepted", decided_by: "cro_1" }), String(acc?.id ?? "x"), env.db, "d", ops,
+    R({ decision: "accepted", decided_by: "cro_1" }), String(acc?.id ?? "x"), env.db, "d", cco,
   );
   await postRiskAcceptanceDecision(
     R({ decision: "accepted", decided_by: "board_chair" }), String(acc?.id ?? "x"),
-    env.db, "d", ops,
+    env.db, "d", cco,
   );
 
   // the sweep: first a warning, then expiry re-opening the breach — both
@@ -1603,17 +1609,24 @@ async function runRiskExceptionsLifecycle(env: FireEnv): Promise<void> {
       env.db, "d", ops,
     );
   }
+  // NEGATIVE: an exception with no risk acceptance behind it
+  await postControlException(
+    R({ control_id: "CG-NSF-01", scope: "commercial members", rationale: "sweep arrangement",
+        approver_id: "cco_1", registered_by: "ops_1",
+        expires_at: "2026-12-31T00:00:00.000Z" }),
+    env.db, "d", ops,
+  );
   // NEGATIVE: self-approved exception
   await postControlException(
     R({ control_id: "CG-NSF-01", scope: "commercial members", rationale: "sweep arrangement",
         approver_id: "ops_1", registered_by: "ops_1",
-        expires_at: "2026-12-31T00:00:00.000Z" }),
+        expires_at: "2026-12-31T00:00:00.000Z", risk_acceptance_id: String(acc?.id ?? "") }),
     env.db, "d", ops,
   );
   await postControlException(
     R({ control_id: "CG-NSF-01", scope: "commercial members", rationale: "sweep arrangement",
         approver_id: "cco_1", registered_by: "ops_1",
-        expires_at: "2026-08-01T00:00:00.000Z" }),
+        expires_at: "2026-08-01T00:00:00.000Z", risk_acceptance_id: String(acc?.id ?? "") }),
     env.db, "d", ops,
   );
   const exc = (env.rows["core.control_exception"] ?? [])[0];
@@ -2656,7 +2669,7 @@ async function runResolutionLifecycle(env: FireEnv): Promise<void> {
   );
   await env.db.schema("core").from("account").upsert({
     id: "acct_rs1", entity_id: "ent_r1", status: "open", account_type: "checking",
-    balance: 0, partner_id: "ptnr_drill",
+    balance: 0, blnk_balance_id: "bal_rs1", partner_id: "ptnr_drill",
   }, { onConflict: "id" });
 
   // RS-02
@@ -2697,11 +2710,13 @@ async function runResolutionLifecycle(env: FireEnv): Promise<void> {
     env.db, "d", ops,
   );
   // credits still post under a garnishment: payroll must not bounce
-  await postFrozenAccountCredit(R({ amount_cents: 250_000 }), "acct_rs1", env.db, "d", ops);
+  await postFrozenAccountCredit(
+    R({ amount_cents: 250_000 }), "acct_rs1", env.db, "d", ops, "core", env.cfg,
+  );
   // NEGATIVE: release with no reference
-  await postFreezeRelease(R({}), "frz_acct_rs1_fraud_hold", env.db, "d", ops);
+  await postFreezeRelease(R({}), "frz_acct_rs1_fraud_hold_FRD-9", env.db, "d", ops);
   await postFreezeRelease(
-    R({ release_reference: "FRD-9-cleared" }), "frz_acct_rs1_fraud_hold", env.db, "d", ops,
+    R({ release_reference: "FRD-9-cleared" }), "frz_acct_rs1_fraud_hold_FRD-9", env.db, "d", ops,
   );
 
   // RS-05 — NEGATIVE: activation with no evidence
@@ -2714,6 +2729,13 @@ async function runResolutionLifecycle(env: FireEnv): Promise<void> {
         notice_template_id: "ntpl_freeze_v1", channels: ["website", "branch", "email"],
         regulator_reference: "NCUA-CONF-77" }),
     env.db, "d", ops,
+  );
+  // ...and lifted. The live control tier runs this lifecycle against the real
+  // core every week; with the payment gate enforcing RS-05, a freeze the drill
+  // never released halted every rail on the demo instance until it was.
+  await postInstitutionFreezeRelease(
+    R({ release_reference: "NCUA-REL-1", released_by: "ncua_regional" }), "instfrz_NCUA-ORD-1",
+    env.db, "d", { ...ops, tokenId: "tok_rs5_cco", roles: ["cco"] },
   );
 
   // RS-06 — NEGATIVE: read-only with no dated snapshot
@@ -2972,18 +2994,23 @@ async function runTailLifecycle(env: FireEnv): Promise<void> {
   );
 
   // DF-06 / DF-09
-  await postAffiliate(R({ list_entry: "PynthiaCUSO", relationship: "cuso" }), env.db, "d", ops);
+  // Run-unique affiliate: the DF-06 limit is on AGGREGATE funded exposure
+  // (fixed 2026-10-06), so on the live tier a fixed affiliate accumulates every
+  // previous run's funded credit and the in-limit credit below would 409.
+  const cuso = `PynthiaCUSO_${env.n()}`;
+  const affId = `aff_${cuso}`;
+  await postAffiliate(R({ list_entry: cuso, relationship: "cuso" }), env.db, "d", ops);
   // NEGATIVE: over the limit
   await postAffiliateTransaction(
     R({ type: "credit", amount_cents: 20_000_000_00, capital_surplus_cents: 100_000_000_00,
         lqa_screened: true, fund: true }),
-    "aff_PynthiaCUSO", env.db, "d", ops,
+    affId, env.db, "d", ops,
   );
   // NEGATIVE: unscreened is not screened-and-clean
   await postAffiliateTransaction(
     R({ type: "credit", amount_cents: 5_000_000_00, capital_surplus_cents: 100_000_000_00,
         fund: true }),
-    "aff_PynthiaCUSO", env.db, "d", ops,
+    affId, env.db, "d", ops,
   );
   await postAffiliateTransaction(
     R({ type: "credit", amount_cents: 5_000_000_00, capital_surplus_cents: 100_000_000_00,
@@ -2992,7 +3019,7 @@ async function runTailLifecycle(env: FireEnv): Promise<void> {
         asset_quality_classification: "pass",
         independent_evaluation: "reviewed by outside counsel 2026-06",
         lqa_screened: true, fund: true }),
-    "aff_PynthiaCUSO", env.db, "d", ops,
+    affId, env.db, "d", ops,
   );
   if ((env.rows["core.insider"] ?? []).length === 0) {
     // subject_ref / role / effective_from are NOT NULL on the live schema —
@@ -3342,7 +3369,7 @@ import {
 } from "../api/basel.ts";
 import {
   postAccountFreeze, postEwiIndicator, postEwiSweep, postFreezeRelease,
-  postFrozenAccountCredit, postInstitutionFreeze, postMemberPortalAccess,
+  postFrozenAccountCredit, postInstitutionFreeze, postInstitutionFreezeRelease, postMemberPortalAccess,
   postMemberPortalState, postRecordsPackage,
 } from "../api/resolution.ts";
 import {

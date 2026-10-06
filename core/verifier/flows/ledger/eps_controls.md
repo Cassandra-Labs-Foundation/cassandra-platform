@@ -31,3 +31,10 @@ Disposition key: `flow` (an existing flow step covers it) · `added` (a step wri
 ## Judgement call
 
 - EPS-05 "a lockout is not forever": a success after lockout is `allowed` and resets the chain. So the lockout blocks nothing beyond recording the decision; a locked-out member can still log in. The stub encodes this behaviour and the flow keeps it, but whether a lockout should hold until an unlock (by time or by an admin) is a policy decision for the user.
+
+### Added 2026-10-06 (stubs written with the EPS-05 / EPS-07 fixes)
+
+| test | disposition | where |
+|---|---|---|
+| EPS-05: every attempt is its own record — fail,fail,success,fail leaves four rows and four decisions | flow | `eps_controls.test.ts` → "every attempt is its own record: Bob's four attempts leave four auth rows in order" |
+| EPS-07: toggling on,off,on,off — every application is its own row and carries the value it replaced | flow | `eps_controls.test.ts` → "toggling back and forth: on again replaces off, and off again replaces on" |

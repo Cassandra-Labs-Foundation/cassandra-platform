@@ -23,7 +23,7 @@ There are three flows:
 | 8 | ERM-07: an acceptance with NO EXPIRY is refused | added | acceptance → "ERM-07: an acceptance with NO expiry is refused (400 expiry_date) …" |
 | 9 | ERM-07: an expiry too soon to be revisited is refused | added | acceptance → "ERM-07: an expiry inside the 30-day warning window … refused (409)" |
 | 10 | ERM-07: the owner cannot grant their own acceptance | added | acceptance → "the owner cannot grant their own acceptance (409) …" and "the CCO accepts it on time …" |
-| 11 | ERM-07: the sweep WARNS before expiry, then EXPIRES and re-opens the breach | added | acceptance → "20 days from expiry (clock moved): the sweep sends the 30-day alert once …" and "the expiry date passes (clock moved): the sweep expires it and the risk is back in breach". The second step is **DEFECT, red**: only an event is written, not a breach record. |
+| 11 | ERM-07: the sweep WARNS before expiry, then EXPIRES and re-opens the breach | added | acceptance → "20 days from expiry (clock moved): the sweep sends the 30-day alert once …" and "the expiry date passes (clock moved): the sweep expires it and the risk is back in breach". The second step is a regression guard (fixed 2026-10-06): the lapse now creates one `risk_breach` row for the risk, keyed on the acceptance. |
 | 12 | ERM-07: the sweep touches every row it examines | added | acceptance → "ERM-07 sweep, 200 days out: no alert yet, but the row is touched …". The flow asserts this on its own row only. Starvation across 200+ rows is not reproduced on the shared instance. |
 | 13 | IC-06: an override with no rationale is refused | added | overrides → "IC-06: an override with no rationale … refused (400 rationale)" |
 | 14 | IC-06: an override registers its actor as a system principal | added | overrides → "an operator overrides the velocity control three times … the actor registered as a system principal" |
@@ -36,13 +36,13 @@ There are three flows:
 
 ## Flow steps beyond the unit file (policy checks)
 
-These steps are written to the policy text in `compliance/policies/enterprise-risk-management` and `internal-controls`. Each one is red against the deployed core:
+These steps are written to the policy text in `compliance/policies/enterprise-risk-management` and `internal-controls`. Each was red against the core deployed before 2026-10-06; all five are fixed in code and stay red until that fix is deployed:
 
-- **DEFECT (ERM-07):** `decision_due_at` is 10 days after the request, and the policy says 30 calendar days. See "ERM-07: the decision is due 30 calendar days from the request".
-- **DEFECT (ERM-07):** any `cu_admin` or `pynthia_ops` credential can decide an acceptance. The policy requires CCO approval, or CRO plus the Board Risk Committee for High risks. See "ERM-07: a staff credential without the CCO role cannot decide an acceptance (403)".
-- **DEFECT (ERM-07):** `risk_acceptance.expiry.warning` (the 7-day escalation) is emitted together with the 30-day alert. See "ERM-07: the 7-day expiry warning has NOT fired 20 days out".
-- **DEFECT (ERM-07):** an expired acceptance emits `risk_breach.opened` but creates no `risk_breach` row. See "the expiry date passes …".
-- **DEFECT (IC-06):** a standing exception with no `risk_acceptance_id` is accepted. See "IC-06: a standing exception with no risk acceptance behind it is refused".
+- **Fixed 2026-10-06 (ERM-07):** `decision_due_at` is now 30 calendar days after the request (was 10). Regression guard: "ERM-07: the decision is due 30 calendar days from the request".
+- **Fixed 2026-10-06 (ERM-07):** deciding an acceptance needs the `cco` role (403 `insufficient_role` otherwise). By user decision the CCO decides at every risk level; there is no CRO tier. The decider is recorded from the credential, the typed `decided_by` is kept as `decided_by_label`, and the requesting credential cannot decide its own acceptance. Regression guard: "ERM-07: a staff credential without the CCO role cannot decide an acceptance (403)".
+- **Fixed 2026-10-06 (ERM-07):** the 7-day `risk_acceptance.expiry.warning` (and its CCO escalation) fires at 7 days before expiry, stamped once in `expiry_warned_at`, separately from the 30-day alert. Regression guard: "ERM-07: the 7-day expiry warning has NOT fired 20 days out".
+- **Fixed 2026-10-06 (ERM-07):** an expired acceptance creates a `risk_breach` row (`risk_acceptance_id`, at most one per acceptance) as well as `risk_breach.opened`. Regression guard: "the expiry date passes …".
+- **Fixed 2026-10-06 (IC-06):** a standing exception needs `risk_acceptance_id` (400 if missing, 404 if unknown). Regression guard: "IC-06: a standing exception with no risk acceptance behind it is refused".
 
 These steps pass:
 

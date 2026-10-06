@@ -2,7 +2,7 @@
   "meta": {
     "generator": "scripts/build_crosswalk.py",
     "controls_source": "controls.json",
-    "controls_generated_at": "2026-10-06T00:42:29+00:00",
+    "controls_generated_at": "2026-10-06T02:34:08+00:00",
     "mappings_source": "crosswalk-mappings.json",
     "emitted_source": "crosswalk-emitted-events.json",
     "under_claim_policy": "'discharges' asserts no further work is needed and is enforced to carry zero gaps. Claims are proposals until reviewed_by is set."
@@ -13,7 +13,7 @@
     "id_collisions": {},
     "policies": 27,
     "cg_controls": 10,
-    "emitted_events": 808,
+    "emitted_events": 810,
     "demanded_triggers": 787,
     "verdicts": {
       "related": 4,

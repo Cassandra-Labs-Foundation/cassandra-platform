@@ -444,7 +444,17 @@ export async function postCapitalAction(
   const preapprovalStatus = isNonEmptyString(body.regulatory_preapproval_status)
     ? String(body.regulatory_preapproval_status)
     : "not_required";
-  const restricted = body.distribution_restriction === true;
+  // CP-09: the distribution restriction is a FACT of the capital position,
+  // set when the position was classified (capital.ts). Before 2026-10-06 it was
+  // read from the request body, so a caller who simply did not mention it
+  // executed a distribution on an undercapitalized position. The body may only
+  // ADD a restriction, never lift the one the position carries.
+  const { data: position, error: posErr } = await db.schema(scope).from("capital_position")
+    .select("id, distribution_restricted").eq("id", String(body.position_id)).maybeSingle();
+  if (posErr) return internalErrorResponse(requestId, posErr.message);
+  if (!position) return notFoundResponse(requestId, "capital_position", String(body.position_id));
+  const restricted = (position as Any).distribution_restricted === true ||
+    body.distribution_restriction === true;
   const executing = body.execute === true;
 
   if (executing && !["not_required", "granted"].includes(preapprovalStatus)) {
@@ -612,7 +622,22 @@ export async function postAffiliateTransaction(
       message: "the affiliate limit is a share of capital and surplus",
     }]);
   }
-  const utilisationBp = Math.round((amount / capital) * 10000);
+  // DF-06: the limit is on the affiliate's AGGREGATE exposure, not on each
+  // transaction alone. Before 2026-10-06 every transaction was checked by
+  // itself and rows were keyed afftx_<affiliate>_<type>, so a second credit
+  // both passed the check and overwrote the first — exposure was never
+  // limited. Every funded transaction already on file counts.
+  const txType = String(body.type ?? "credit");
+  const { data: priorTx, error: priorErr } = await db.schema(scope).from("affiliate_transaction")
+    .select("id, affiliate_transaction_type, affiliate_transaction_amount_cents, funded_at")
+    .eq("affiliate_id", affiliateId);
+  if (priorErr) return internalErrorResponse(requestId, priorErr.message);
+  const prior = (priorTx ?? []) as unknown as Array<Record<string, unknown>>;
+  const fundedCents = prior
+    .filter((t) => t.funded_at != null)
+    .reduce((sum, t) => sum + Number(t.affiliate_transaction_amount_cents ?? 0), 0);
+  const exposure = fundedCents + amount;
+  const utilisationBp = Math.round((exposure / capital) * 10000);
   const withinLimits = utilisationBp <= AFFILIATE_SINGLE_LIMIT_BP;
   const screened = body.lqa_screened === true;
   const funding = body.fund === true;
@@ -620,7 +645,8 @@ export async function postAffiliateTransaction(
   if (funding && !withinLimits) {
     return apiError(409, "affiliate_limit_exceeded", requestId, {
       title: "affiliate transaction over the limit",
-      detail: `${utilisationBp}bp of capital and surplus exceeds ${AFFILIATE_SINGLE_LIMIT_BP}bp`,
+      detail: `aggregate exposure ${utilisationBp}bp of capital and surplus ` +
+        `(${fundedCents} cents already funded + ${amount} new) exceeds ${AFFILIATE_SINGLE_LIMIT_BP}bp`,
     });
   }
   if (funding && !screened) {
@@ -631,10 +657,16 @@ export async function postAffiliateTransaction(
     });
   }
   const now = new Date();
-  const id = `afftx_${affiliateId}_${body.type ?? "tx"}`;
-  const { error } = await db.schema(scope).from("affiliate_transaction").upsert({
+  // Each transaction is its own record. The first of a type keeps the
+  // historical id (afftx_<affiliate>_<type>); later ones take a sequence
+  // suffix. INSERT, not upsert: a concurrent writer that picked the same
+  // sequence fails loudly instead of overwriting a funded credit.
+  const seq = prior.filter((t) => String(t.affiliate_transaction_type) === txType).length + 1;
+  const baseId = `afftx_${affiliateId}_${txType}`;
+  const id = seq === 1 ? baseId : `${baseId}_${seq}`;
+  const { error } = await db.schema(scope).from("affiliate_transaction").insert({
     id, affiliate_id: affiliateId,
-    affiliate_transaction_type: String(body.type ?? "credit"),
+    affiliate_transaction_type: txType,
     affiliate_transaction_amount_cents: amount,
     cu_unimpaired_capital_surplus_cents: capital,
     affiliate_limit_utilization_bp: utilisationBp,
@@ -662,11 +694,19 @@ export async function postAffiliateTransaction(
     funded_at: funding ? now.toISOString() : null,
     file_archived_at: funding ? now.toISOString() : null,
     provenance: provenanceFor(scope, ctx),
-  }, { onConflict: "id" });
-  if (error) return internalErrorResponse(requestId, error.message);
+  });
+  if (error) {
+    if ((error as Any).code === "23505") {
+      return apiError(409, "concurrent_affiliate_transaction", requestId, {
+        title: "another transaction for this affiliate was recorded concurrently",
+        detail: "retry: the aggregate limit must be re-checked against it",
+      });
+    }
+    return internalErrorResponse(requestId, error.message);
+  }
 
   const payload = {
-    "affiliate.transaction_type": body.type ?? "credit",
+    "affiliate.transaction_type": txType,
     "affiliate.transaction_amount": amount,
     "cu.unimpaired_capital_surplus": capital,
     "affiliate.limit_utilization": utilisationBp,
@@ -679,6 +719,7 @@ export async function postAffiliateTransaction(
     "affiliate.independent_evaluation": body.independent_evaluation ?? null,
     "affiliate.list": [aff.affiliate_list_entry],
     within_limits: withinLimits,
+    aggregate_funded_cents: fundedCents,
   };
   await emit(db, scope, `ev_${id}_lim`, "affiliate.limits.checked",
     "affiliate_transaction", id, payload, ctx);
@@ -1023,6 +1064,19 @@ export async function postWireRelease(
     ? null
     : allowlist.includes(String(body.ip ?? ""));
   const second = isNonEmptyString(body.second_approval) ? body.second_approval : null;
+  // EPS-06 dual control. A second approval is only a second pair of eyes if it
+  // is NOT the originator's: neither the originator naming themselves as the
+  // second approver, nor the originator's own credential submitting the
+  // release (the caller is bound to the approval it submits, as the wire
+  // approve route does with ctx.tokenId). Before 2026-10-06 any non-empty
+  // second_approval released the wire, including the originator's own id.
+  const originator = String(body.originator_id);
+  if (second !== null && (second === originator || ctx.tokenId === originator)) {
+    return apiError(409, "dual_control_violation", requestId, {
+      title: "wire released by its own originator",
+      detail: "the second approver must be a different person from the originator",
+    });
+  }
   const releasable = pinOk && ipAllowlisted === true && second !== null;
 
   const now = new Date();

@@ -114,7 +114,7 @@ flow("eps_controls: EPS-05 — online-banking logins: the third consecutive fail
 
   await t.step("every attempt is its own record: Bob's four attempts leave four auth rows in order", async () => {
     const rows = (await rowsWhere("eps_auth_event", "subject_ref", bob)).sort((a, b) => a.chain_seq - b.chain_seq);
-    // DEFECT: eps_auth_event ids are epsauth_<subject>_<failure_count>_<outcome>; Bob's fourth attempt (count 1) upserts over his first, so the audit trail keeps 3 rows and the denial emits no new events.
+    // Regression guard (fixed 2026-10-06): eps_auth_event ids were epsauth_<subject>_<failure_count>_<outcome>, so Bob's fourth attempt (count 1) upserted over his first and its events were dropped. Ids are now epsauth_<subject>_<chain_seq>, inserted.
     assertEq(rows.length, 4, `four attempts recorded (got ${rows.map((r) => `${r.chain_seq}:${r.decision}`).join(",")})`);
   });
 
@@ -177,7 +177,7 @@ flow("eps_controls: EPS-07 — a member's card controls: the first application i
     const on = await apply("on");
     assertEq(on.body.data.previous_value, "off", "on again replaced off");
     const off = await apply("off");
-    // DEFECT: card-control rows are keyed epscc_<card>_<type>_<value> and the prior value is read by created_at, which an upsert never advances; the second 'off' reads itself as the prior value ("off") and reports no change.
+    // Regression guard (fixed 2026-10-06): card-control rows were keyed epscc_<card>_<type>_<value> and the prior read by created_at, which an upsert never advances, so the second 'off' read itself as the prior value. Each application is now its own row ordered by control_seq.
     assertEq(off.body.data.previous_value, "on", `off again replaced on (${body(off)})`);
   });
 });
@@ -467,8 +467,10 @@ flow("eps_controls: EPS-06 — wire release needs PIN, an allowlisted IP and a s
   await t.step("the originator cannot be their own second approver", async () => {
     const w = rid("w");
     const r = await release(w, { ip_allowlist: ["203.0.113.9"], second_approval: "ops_alice" });
-    // DEFECT: postWireRelease only checks second_approval is non-empty; the originator naming themselves as second approver releases the wire (released_at set).
+    // Regression guard (fixed 2026-10-06): postWireRelease used to accept any non-empty second_approval, so the originator could approve their own release. It now refuses 409 dual_control_violation (nothing written).
     assertEq((await rowById("wire_release", `wrel_${w}`))?.released_at ?? null, null, `self-approved release (${body(r)})`);
+    assertEq(r.status, 409, `self-approval refused (${body(r)})`);
+    assertEq(r.body.type, "dual_control_violation", "typed refusal");
   });
 
   await t.step("ACH control results: a verdict with no individual checks is refused; the pass verdict is DERIVED — one failed check fails it", async () => {

@@ -26,5 +26,5 @@ Disposition key: `flow` (covered by a flow step), `added` (a step written to clo
 - Assessment and external comms for an incident nobody declared are 404 with no evidence written.
 - An unknown severity (`sev9`) is refused at declaration.
 - A follow-up statement after the review goes out without re-naming counsel, and keeps the original reviewer and review time.
-- **DEFECT:** the follow-up statement leaves no event. `postExternalComms` emits under the fixed id `evt_<incident>_extcomms` with `ignoreDuplicates` and overwrites `comms_holding_statement`, so after a second statement no record holds both. See "BOTH statements that went out are evidenced verbatim".
+- **Fixed 2026-10-06 (regression guard):** every statement that goes out gets its own `incident.external_comms.recorded` event, verbatim (unique id per statement; it used to be a fixed id with `ignoreDuplicates`). The row keeps the latest statement in `comms_holding_statement`. See "BOTH statements that went out are evidenced verbatim".
 - Hygiene: the flows delete their incidents at the end, so the undetermined sweep's 200-row window is not filled with test declarations.

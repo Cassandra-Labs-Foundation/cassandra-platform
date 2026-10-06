@@ -328,6 +328,7 @@ import {
   postFreezeRelease,
   postFrozenAccountCredit,
   postInstitutionFreeze,
+  postInstitutionFreezeRelease,
   postMemberPortalAccess,
   postMemberPortalState,
   postRecordsPackage,
@@ -2445,6 +2446,13 @@ export const generatedRoutes: Route[] = [
     audience: "internal",
     handler: async (req, _params, requestId, ctx) =>
       await postInstitutionFreeze(req, createDb(), requestId, ctx),
+  },
+  {
+    method: "POST", pattern: /^\/resolution\/institution-freeze\/([^\/]+)\/release\/?$/,
+    endpoint: "POST /resolution/institution-freeze/{id}/release", tier: "write", paramNames: ["id"],
+    audience: "internal",
+    handler: async (req, params, requestId, ctx) =>
+      await postInstitutionFreezeRelease(req, params.id, createDb(), requestId, ctx),
   },
   {
     method: "POST", pattern: /^\/resolution\/member-portal\/?$/,

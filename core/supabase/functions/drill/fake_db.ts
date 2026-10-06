@@ -516,14 +516,40 @@ export function makeDrillDb(): DrillDb {
             // NOTE: `chain` is returned via strict() below; add new methods HERE.
 
             insert(rawRow: Any) {
-              const row = applyDefaults(rawRow, table, new Date().toISOString());
-              const v = check(schema, table, row);
-              if (v) {
-                violations.push(v);
-                return Promise.resolve({ data: null, error: { message: `${v.constraint}: ${v.detail}` } });
-              }
-              rows[key].push({ ...row });
-              return Promise.resolve({ data: null, error: null });
+              // Thenable that also carries .select()/.maybeSingle()/.single(),
+              // like upsert below: the real client supports insert().select().
+              // A duplicate primary key is Postgres' 23505, not a silent second
+              // row — handlers that INSERT to avoid overwriting history depend
+              // on the collision being loud.
+              const run = (): Any => {
+                const row = applyDefaults(rawRow, table, new Date().toISOString());
+                if (row.id !== undefined && row.id !== null &&
+                  rows[key].some((r) => r.id === row.id)) {
+                  return {
+                    data: null,
+                    error: { code: "23505", message: `duplicate key value violates unique constraint "${table}_pkey"` },
+                  };
+                }
+                const v = check(schema, table, row);
+                if (v) {
+                  violations.push(v);
+                  return { data: null, error: { message: `${v.constraint}: ${v.detail}` } };
+                }
+                rows[key].push({ ...row });
+                return { data: { ...row }, error: null };
+              };
+              let done: Any = null;
+              let selected = false;
+              const once = (): Any => (done ??= run());
+              const res: Any = {
+                then: (f: (v: Any) => Any, r?: (e: Any) => Any) =>
+                  Promise.resolve(once()).then((v: Any) =>
+                    f({ data: selected && v.data ? [v.data] : null, error: v.error }), r),
+                select: () => (selected = true, res),
+                maybeSingle: () => Promise.resolve(once()),
+                single: () => Promise.resolve(once()),
+              };
+              return strict(res, "insert");
             },
 
             upsert(rawRow: Any, opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {

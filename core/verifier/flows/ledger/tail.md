@@ -56,3 +56,12 @@ Disposition key: `flow` (an existing flow step covers it) · `added` (a step wri
 
 - Several controls trust caller-supplied facts the core could check: IC-04's `age_days`, EPS-06's `ip_allowlist` and `pin_verified`, IC-02's `compensating_approved_by`, EPS-01's `erm_reviewed_by` (which may equal the sponsor), and a capital action's `position_id` (an unknown position is accepted).
 - None of the tail routes is gated by duty role: any `cu_admin` or `pynthia_ops` token can execute capital actions, approve SoD exceptions or activate an EPS service. Only partners are refused.
+
+### Added 2026-10-06 (stubs written with the CP-09 / DF-06 / EPS-06 fixes)
+
+| test | disposition | where |
+|---|---|---|
+| CP-09: a distribution on a RESTRICTED POSITION is refused even when the caller does not say so | flow | `internal_controls.test.ts` → "CP-09: the restriction is a FACT of the position — …" |
+| CP-09: a capital action against an unknown position is 404 | added | `internal_controls.test.ts` → "a capital action against a position that does not exist is 404" |
+| DF-06: the limit is on AGGREGATE exposure — a second credit is its own row and counts | flow | `internal_controls.test.ts` → "a SECOND $60k credit to the same affiliate is its own record and counts toward the limit …" |
+| EPS-06: the originator cannot be their own second approver | flow | `eps_controls.test.ts` → "the originator cannot be their own second approver" |

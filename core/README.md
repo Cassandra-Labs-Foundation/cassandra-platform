@@ -39,7 +39,7 @@ Two things did **not** come across:
 ## verifier/ — read this before using it
 
 `generator/enumerate.py` turns `core-api.yaml` + `controls.json` + `properties.yaml` +
-`compliance-floor.yaml` into `targets.json` (770 targets: 372 contract, 333 control,
+`compliance-floor.yaml` into `targets.json` (771 targets: 373 contract, 333 control,
 41 property, 24 state-machine) and `worklist.md`. Deterministic; the model never decides
 *what* to test, only *how*. The parser was ported to OpenAPI 3.0.3 in August 2026;
 `enumerate.py` now runs as a normal step of `scripts/rebuild_artifacts.sh`, so
@@ -52,7 +52,7 @@ the hermetic backend (`fake_db.ts`), the live one (`live_db.ts`), the case inven
 a grader, and produces 333 results in `control-tests.json` / `control-tests-live.json`.
 Verifier's 333 control targets are the same population.
 
-What drill does *not* cover is verifier's other **437** targets — 372 contract (error
+What drill does *not* cover is verifier's other **438** targets — 373 contract (error
 envelope, pagination, versioning, idempotency), 41 property (cross-cutting invariants),
 24 state-machine. That gap is the real remaining value here.
 

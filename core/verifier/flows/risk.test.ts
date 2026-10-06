@@ -286,8 +286,8 @@ flow("risk: the owner asks to carry a breached risk for a bounded time → someo
     await t.step("ERM-07: the decision is due 30 calendar days from the request", async () => {
       const a = await rowById("risk_acceptance", acc);
       const days = Math.round((new Date(a.decision_due_at).getTime() - new Date(a.requested_at).getTime()) / DAY);
-      // DEFECT: risk_exceptions.ts ACCEPTANCE_DECISION_DAYS = 10; ERM-07 sets risk_acceptance.decision_due_at
-      // at 30 calendar days from the request.
+      // Regression guard (fixed 2026-10-06): ACCEPTANCE_DECISION_DAYS was 10; ERM-07 sets
+      // risk_acceptance.decision_due_at at 30 calendar days from the request.
       assertEq(days, 30, "decision_due_at − requested_at in days");
     });
 
@@ -306,9 +306,10 @@ flow("risk: the owner asks to carry a breached risk for a bounded time → someo
 
     await t.step("ERM-07: a staff credential without the CCO role cannot decide an acceptance (403), nothing decided", async () => {
       const res = await api("POST", `/risk/acceptances/${acc}/decide`, { decision: "accepted", decided_by: "board_risk_committee" }, { key: noRole });
-      // DEFECT: postRiskAcceptanceDecision checks no role at all — ERM-07 requires CCO approval (CRO + BRC for
-      // High/Very High); any cu_admin/pynthia_ops token can grant an acceptance.
+      // Regression guard (fixed 2026-10-06): postRiskAcceptanceDecision checked no role at all. By user
+      // decision the CCO decides acceptances at every risk level; any other staff token gets 403.
       assertEq(res.status, 403, `no-role decision (${body(res)})`);
+      assertEq(res.body.type, "insufficient_role", "typed refusal");
       if (res.status === 200) {
         // undo the unauthorised grant so the CCO step below decides from a clean state
         await setClock("risk_acceptance", acc, { decision: null, decided_at: null, decided_by: null });
@@ -321,7 +322,9 @@ flow("risk: the owner asks to carry a breached risk for a bounded time → someo
       assertEq(res.status, 200, `decide (${body(res)})`);
       const a = await rowById("risk_acceptance", acc);
       assertEq(a.decision, "accepted", "accepted");
-      assertEq(a.decided_by, "board_risk_committee", "decider recorded");
+      // the decider is the CREDENTIAL (fixed 2026-10-06); the typed name is only a display label
+      assert(String(a.decided_by).startsWith("tok_test_cu_admin_"), `decider is the cco credential (${a.decided_by})`);
+      assertEq(a.decided_by_label, "board_risk_committee", "typed name kept as a label");
       assert(a.decided_at, "decided_at stamped");
       const ev = (await eventsFor("risk_acceptance", acc)).get("risk_acceptance.decided")?.[0];
       assertEq(ev?.payload.decided_late, false, "on time");
@@ -350,8 +353,8 @@ flow("risk: the owner asks to carry a breached risk for a bounded time → someo
     });
 
     await t.step("ERM-07: the 7-day expiry warning has NOT fired 20 days out", async () => {
-      // DEFECT: postRiskAcceptanceSweep emits risk_acceptance.expiry.warning together with the 30-day alert;
-      // ERM-07 defines it as a separate escalation to the CCO 7 days before expiry, which therefore never happens.
+      // Regression guard (fixed 2026-10-06): the sweep used to emit risk_acceptance.expiry.warning together with
+      // the 30-day alert; ERM-07 defines it as a separate escalation to the CCO 7 days before expiry.
       assert(!(await eventsFor("risk_acceptance", acc)).has("risk_acceptance.expiry.warning"),
         "risk_acceptance.expiry.warning emitted 20 days before expiry");
     });
@@ -367,8 +370,8 @@ flow("risk: the owner asks to carry a breached risk for a bounded time → someo
       assertEq(ev.get("risk_breach.opened")?.[0].payload.reason, "risk_acceptance_expired", "breach re-opened, with the reason");
       const after = await rowsWhere("risk_breach", "appetite_id", appetiteId);
       for (const b of after) if (!breaches.includes(b.id)) breaches.push(b.id);
-      // DEFECT: the sweep only emits a risk_breach.opened EVENT; ERM-07 requires a breach RECORD created for the
-      // associated risk, so the lapsed acceptance leaves no open breach row to triage, present or review.
+      // Regression guard (fixed 2026-10-06): the sweep used to emit only a risk_breach.opened EVENT; ERM-07
+      // requires a breach RECORD for the associated risk, one per lapsed acceptance.
       assertEq(after.length, breachesBefore + 1, "a new risk_breach row for the lapsed acceptance's risk");
     });
 
@@ -482,8 +485,8 @@ flow("risk: control overrides are recorded with a rationale and their REPETITION
 
     await t.step("IC-06: a standing exception with no risk acceptance behind it is refused", async () => {
       const res = await exception({ risk_acceptance_id: undefined, control_id: `${exCtl}-NORA` });
-      // DEFECT: postControlException treats risk_acceptance_id as optional; IC-06 requires a standing exception to
-      // be registered with an expiry AND a risk acceptance (exception.risk_acceptance).
+      // Regression guard (fixed 2026-10-06): risk_acceptance_id was optional; IC-06 requires a standing exception
+      // to be registered with an expiry AND a risk acceptance (exception.risk_acceptance).
       assertEq(res.status, 400, `no risk acceptance (${body(res)})`);
       assertEq((await rowsWhere("control_exception", "control_id", `${exCtl}-NORA`)).length, 0, "no exception row");
     });

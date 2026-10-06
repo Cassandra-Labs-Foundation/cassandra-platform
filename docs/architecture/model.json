@@ -8,9 +8,9 @@
       "tech": "runGate · cross-rail daily sum",
       "intent": "Monitoring should identify activity that needs review. The entry conditions determine which movements reach this detector.",
       "behavior": "The API first totals today’s qualifying outgoing movements across four rails. If the total including this movement exceeds $25,000, it blocks and returns before the large-movement detector.",
-      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. When safe mode (RS-03) is active it is checked first inside runGate, on every rail, and then an open OFAC hold on the paying member (BSA-05); a movement either refuses never reaches the velocity cap or this detector. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
+      "boundary": "This ordering means a velocity-blocked movement does not reach this detector. When safe mode (RS-03) is active it is checked first inside runGate, on every rail, then an open OFAC hold on the paying member (BSA-05), then an active account freeze (RS-04) or institution-wide freeze (RS-05); a movement any of them refuses never reaches the velocity cap or this detector. This trace starts inside runGate; it does not cover every earlier refusal or replay.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 202,
+      "line": 297,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 219,
       "contract": "Reads transfer, wire_transfer, ach_transfer and card_authorization. Uses UTC day boundaries and selected statuses; it is not a rolling 24-hour window."
@@ -25,7 +25,7 @@
       "behavior": "A movement greater than $10,000 creates a passing control result and calls the alert writer. Exactly $10,000 does not match this rule.",
       "boundary": "The alert is named ctr_threshold in code. That name alone does not demonstrate that cash reporting obligations are satisfied.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 265,
+      "line": 360,
       "test": "core/verifier/flows/onboard_transfer_large_txn.test.ts",
       "testline": 60,
       "contract": "Writes control_result with decision=pass. subject_ref is the source account; entity_hash is SHA-256 of the source account ID."
@@ -40,7 +40,7 @@
       "behavior": "Records a blocking velocity result, updates the movement to its rail-specific rejection status, and returns an error.",
       "boundary": "This is a neighboring payment gate, included here because it changes this control’s reach.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 236,
+      "line": 331,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 219,
       "contract": "Returns blocked=true and velocity_limit_exceeded. Writes are awaited and errors throw."
@@ -70,7 +70,7 @@
       "behavior": "Amounts at or below $10,000 skip this detector. Subsequent structuring and other payment checks can still run.",
       "boundary": "“No alert from this rule” does not mean the movement is safe, compliant, or guaranteed to settle.",
       "file": "core/supabase/functions/api/transfers.ts",
-      "line": 294,
+      "line": 389,
       "test": "core/verifier/flows/transfers.test.ts",
       "testline": 188,
       "contract": "Control returns to the remainder of runGate. This branch is not the end of payment processing."
@@ -424,7 +424,7 @@
     "reviewedAt": "2026-10-03",
     "method": "Manual source trace",
     "sources": {
-      "core/supabase/functions/api/transfers.ts": "4b7529193365165582b43c9545e30ea4a6840964b2099198ad06ded3befbf71f",
+      "core/supabase/functions/api/transfers.ts": "dea26684035f1f2d5e69c7010d3b28b82915962ca633c5a1daf693f41cb852c8",
       "core/verifier/flows/transfers.test.ts": "bcb54b0985c73e8156cda76a10cf632d6461d8d594f29fb5f733188088648f8b",
       "core/verifier/flows/onboard_transfer_large_txn.test.ts": "d082613a09fa522aaba59758280a735b2adccceb18f73576914ca3a12a59b8d1",
       "core/supabase/functions/api/bsa.ts": "b59c82e4a93c34e606b0d68423389f453151e429ee28f05c5358a42b5c5d4fdd",

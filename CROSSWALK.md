@@ -6,7 +6,7 @@
 
 Catalogue: **316** distinct controls across **27** policies (333 rows — shared controls like SC-02 are replicated into every policy that references them, and are counted once here). 
 Implemented: **10** `CG-*` controls. 
-Event codes the core can emit: **808**. 
+Event codes the core can emit: **810**. 
 Distinct trigger events the catalogue demands: **787**.
 
 ## How to read this

@@ -8,6 +8,7 @@ import { assert, assertEquals } from "jsr:@std/assert@1";
 import { makeDrillDb } from "../drill/fake_db.ts";
 import { OPS_CTX, req } from "./test_helpers.ts";
 import {
+  ACCEPTANCE_DECISION_DAYS,
   EXPIRY_ALERT_DAYS,
   postControlException,
   postControlExceptionSweep,
@@ -152,7 +153,12 @@ Deno.test("ERM-07: an expiry too soon to be revisited is refused", async () => {
   assertEquals(EXPIRY_ALERT_DAYS, 30);
 });
 
-Deno.test("ERM-07: the owner cannot grant their own acceptance", async () => {
+// Updated 2026-10-06: decisions are role-gated to the CCO and attributed to
+// the credential. This stub used to decide with a role-less ops token and read
+// the typed decided_by as the decider — the defect itself.
+const CCO_CTX = { ...CTX, tokenId: "tok_cco_test", roles: ["cco" as const] };
+
+Deno.test("ERM-07: only a CCO credential decides; the owner cannot grant their own acceptance", async () => {
   const { dbx, db } = await seedAppetite();
   const far = new Date(Date.now() + 200 * 86_400_000).toISOString();
   await postRiskAcceptance(
@@ -160,20 +166,43 @@ Deno.test("ERM-07: the owner cannot grant their own acceptance", async () => {
     db, "t", CTX,
   );
   const id = String(dbx.rows["core.risk_acceptance"][0].id);
+  const noRole = await postRiskAcceptanceDecision(
+    req({ decision: "accepted", decided_by: "board_chair" }), id, db, "t", CTX,
+  );
+  assertEquals(noRole.status, 403);
+  assertEquals((await noRole.json()).type, "insufficient_role");
   assertEquals(
     (await postRiskAcceptanceDecision(
-      req({ decision: "accepted", decided_by: "cro_1" }), id, db, "t", CTX,
+      req({ decision: "accepted", decided_by: "cro_1" }), id, db, "t", CCO_CTX,
     )).status,
     409,
   );
   assertEquals(dbx.rows["core.risk_acceptance"][0].decision, null);
   assertEquals(
     (await postRiskAcceptanceDecision(
-      req({ decision: "accepted", decided_by: "board_chair" }), id, db, "t", CTX,
+      req({ decision: "accepted", decided_by: "board_chair" }), id, db, "t", CCO_CTX,
     )).status,
     200,
   );
+  const a = dbx.rows["core.risk_acceptance"][0];
+  assertEquals(a.decided_by, "tok_cco_test", "the decider is the credential");
+  assertEquals(a.decided_by_label, "board_chair", "the typed name is only a label");
   assertEquals(dbx.violations, []);
+});
+
+Deno.test("ERM-07: the credential that requested an acceptance cannot decide it, even as CCO", async () => {
+  const { dbx, db } = await seedAppetite();
+  const far = new Date(Date.now() + 200 * 86_400_000).toISOString();
+  await postRiskAcceptance(
+    req({ risk_id: "risk_1", owner_id: "cro_1", rationale: "r", expiry_date: far }),
+    db, "t", CCO_CTX,
+  );
+  const id = String(dbx.rows["core.risk_acceptance"][0].id);
+  const res = await postRiskAcceptanceDecision(
+    req({ decision: "accepted", decided_by: "someone_else" }), id, db, "t", CCO_CTX,
+  );
+  assertEquals(res.status, 409);
+  assertEquals(dbx.rows["core.risk_acceptance"][0].decision, null);
 });
 
 Deno.test("ERM-07: the sweep WARNS before expiry, then EXPIRES and re-opens the breach", async () => {
@@ -222,7 +251,88 @@ Deno.test("ERM-07: the sweep touches every row it examines", async () => {
   );
 });
 
+Deno.test("ERM-07: the decision is due 30 calendar days from the request", async () => {
+  const { dbx, db } = await seedAppetite();
+  const far = new Date(Date.now() + 200 * 86_400_000).toISOString();
+  await postRiskAcceptance(
+    req({ risk_id: "risk_1", owner_id: "cro_1", rationale: "r", expiry_date: far }),
+    db, "t", CTX,
+  );
+  const a = dbx.rows["core.risk_acceptance"][0];
+  const days = Math.round(
+    (Date.parse(a.decision_due_at) - Date.parse(a.requested_at)) / 86_400_000,
+  );
+  assertEquals(days, ACCEPTANCE_DECISION_DAYS);
+  assertEquals(days, 30);
+});
+
+Deno.test("ERM-07: the 30-day alert and the 7-day warning fire at their OWN thresholds, each once", async () => {
+  const { dbx, db } = await seedAppetite();
+  const far = new Date(Date.now() + 200 * 86_400_000).toISOString();
+  await postRiskAcceptance(
+    req({ risk_id: "risk_1", owner_id: "cro_1", rationale: "r", expiry_date: far }),
+    db, "t", CTX,
+  );
+  const a = dbx.rows["core.risk_acceptance"][0];
+  const count = (c: string) => codes(dbx.rows).filter((x) => x === c).length;
+
+  // 20 days out: the 30-day alert, and NOT the 7-day warning
+  a.expiry_alert_at = "2020-01-01T00:00:00.000Z";
+  a.expiry_date = new Date(Date.now() + 20 * 86_400_000).toISOString();
+  await postRiskAcceptanceSweep(req({}), db, "t", CTX);
+  await postRiskAcceptanceSweep(req({}), db, "t", CTX);
+  assertEquals(count("risk_acceptance.expiry_alerted"), 1);
+  assertEquals(count("risk_acceptance.expiry.warning"), 0, "the 7-day warning is not due 20 days out");
+
+  // 5 days out: the 7-day warning and its escalation, once
+  a.expiry_date = new Date(Date.now() + 5 * 86_400_000).toISOString();
+  await postRiskAcceptanceSweep(req({}), db, "t", CTX);
+  await postRiskAcceptanceSweep(req({}), db, "t", CTX);
+  assertEquals(count("risk_acceptance.expiry.warning"), 1);
+  assertEquals(count("risk_acceptance.expiry_alerted"), 2, "the 30-day alert plus the 7-day escalation");
+  assert(dbx.rows["core.risk_acceptance"][0].expiry_warned_at, "expiry_warned_at stamped");
+  assertEquals(dbx.violations, []);
+});
+
+Deno.test("ERM-07: a lapsed acceptance creates ONE breach RECORD for its risk, copying the covered breach", async () => {
+  const { dbx, db } = await seedAppetite();
+  await postRiskObservation(req({ appetite_id: "rapp_1", kri_value: 500 }), db, "t", CTX);
+  const prior = dbx.rows["core.risk_breach"][0];
+  const far = new Date(Date.now() + 200 * 86_400_000).toISOString();
+  await postRiskAcceptance(
+    req({ risk_id: "risk_1", breach_id: prior.id, owner_id: "cro_1", rationale: "r", expiry_date: far }),
+    db, "t", CTX,
+  );
+  const a = dbx.rows["core.risk_acceptance"][0];
+  a.expiry_alert_at = "2020-01-01T00:00:00.000Z";
+  a.expiry_date = "2020-01-02T00:00:00.000Z";
+  await postRiskAcceptanceSweep(req({}), db, "t", CTX);
+  a.expired_at = null; // even a re-run over the same lapse must not open a second breach
+  await postRiskAcceptanceSweep(req({}), db, "t", CTX);
+  const lapses = dbx.rows["core.risk_breach"].filter((b) => b.risk_acceptance_id === a.id);
+  assertEquals(lapses.length, 1, "one breach record per lapsed acceptance");
+  assertEquals(lapses[0].appetite_id, "rapp_1");
+  assertEquals(lapses[0].risk_id, "risk_1");
+  assertEquals(lapses[0].severity, prior.severity);
+  assertEquals(lapses[0].current_excursion, prior.current_excursion);
+  const opened = (dbx.rows["core.event"] ?? []).find((e) => e.code === "risk_breach.opened" &&
+    (e.payload as Any).reason === "risk_acceptance_expired");
+  assertEquals((opened!.payload as Any)["risk_breach.id"], lapses[0].id, "the event names the record");
+  assertEquals(dbx.violations, []);
+});
+
 // ------------------------------------------------------------ IC-06 overrides
+
+/** IC-06 exceptions need a risk acceptance behind them. */
+async function withAcceptance() {
+  const { dbx, db } = await seedAppetite();
+  const far = new Date(Date.now() + 200 * 86_400_000).toISOString();
+  await postRiskAcceptance(
+    req({ risk_id: "risk_1", owner_id: "cro_1", rationale: "r", expiry_date: far }),
+    db, "t", CTX,
+  );
+  return { dbx, acc: String(dbx.rows["core.risk_acceptance"][0].id) };
+}
 
 Deno.test("IC-06: an override with no rationale is refused", async () => {
   const dbx = makeDrillDb();
@@ -245,13 +355,13 @@ Deno.test("IC-06: an override registers its actor as a system principal", async 
 });
 
 Deno.test("IC-06: an exception cannot be self-approved and must be time-boxed", async () => {
-  const dbx = makeDrillDb();
+  const { dbx, acc } = await withAcceptance();
   const far = new Date(Date.now() + 100 * 86_400_000).toISOString();
   assertEquals(
     (await postControlException(
       req({
         control_id: "C1", scope: "s", rationale: "r",
-        approver_id: "a", registered_by: "a", expires_at: far,
+        approver_id: "a", registered_by: "a", expires_at: far, risk_acceptance_id: acc,
       }),
       dbx.client, "t", CTX,
     )).status,
@@ -259,7 +369,7 @@ Deno.test("IC-06: an exception cannot be self-approved and must be time-boxed", 
   );
   assertEquals(
     (await postControlException(
-      req({ control_id: "C1", scope: "s", rationale: "r", approver_id: "a", registered_by: "b" }),
+      req({ control_id: "C1", scope: "s", rationale: "r", approver_id: "a", registered_by: "b", risk_acceptance_id: acc }),
       dbx.client, "t", CTX,
     )).status,
     400,
@@ -268,12 +378,12 @@ Deno.test("IC-06: an exception cannot be self-approved and must be time-boxed", 
 });
 
 Deno.test("IC-06: an expired exception REVERTS — the control comes back on", async () => {
-  const dbx = makeDrillDb();
+  const { dbx, acc } = await withAcceptance();
   const far = new Date(Date.now() + 100 * 86_400_000).toISOString();
   await postControlException(
     req({
       control_id: "C1", scope: "s", rationale: "r",
-      approver_id: "cco", registered_by: "ops_1", expires_at: far,
+      approver_id: "cco", registered_by: "ops_1", expires_at: far, risk_acceptance_id: acc,
     }),
     dbx.client, "t", CTX,
   );
@@ -290,17 +400,34 @@ Deno.test("IC-06: an expired exception REVERTS — the control comes back on", a
 });
 
 Deno.test("IC-06: an exception inside the warning window is flagged as expiring", async () => {
-  const dbx = makeDrillDb();
+  const { dbx, acc } = await withAcceptance();
   const soon = new Date(Date.now() + 10 * 86_400_000).toISOString();
   await postControlException(
     req({
       control_id: "C1", scope: "s", rationale: "r",
-      approver_id: "cco", registered_by: "ops_1", expires_at: soon,
+      approver_id: "cco", registered_by: "ops_1", expires_at: soon, risk_acceptance_id: acc,
     }),
     dbx.client, "t", CTX,
   );
   await postControlExceptionSweep(req({}), dbx.client, "t", CTX);
   assert(codes(dbx.rows).includes("exception.expiring"));
+});
+
+Deno.test("IC-06: a standing exception must reference a risk acceptance (400), and a real one (404)", async () => {
+  const { dbx, acc } = await withAcceptance();
+  const far = new Date(Date.now() + 100 * 86_400_000).toISOString();
+  const base = { control_id: "C1", scope: "s", rationale: "r", approver_id: "cco", registered_by: "ops_1", expires_at: far };
+  const none = await postControlException(req(base), dbx.client, "t", CTX);
+  assertEquals(none.status, 400);
+  assert(JSON.stringify(await none.json()).includes("risk_acceptance_id"));
+  const unknown = await postControlException(
+    req({ ...base, risk_acceptance_id: "racc_nope" }), dbx.client, "t", CTX,
+  );
+  assertEquals(unknown.status, 404);
+  assertEquals((dbx.rows["core.control_exception"] ?? []).length, 0);
+  const ok = await postControlException(req({ ...base, risk_acceptance_id: acc }), dbx.client, "t", CTX);
+  assertEquals(ok.status, 201);
+  assertEquals(dbx.rows["core.control_exception"][0].risk_acceptance_id, acc);
 });
 
 Deno.test("IC-06: the analytics NAME the repeatedly-overridden control", async () => {
