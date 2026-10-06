@@ -383,9 +383,13 @@ export async function getDashboardData(
 // enforces (redactForBoundary) — the dashboard is a window, not a leak.
 
 const HB_DEFAULT_HOURS = 168;
-const HB_MAX_HOURS = 2160; // 90 days
+// 30 days. It was 90, which aggregates essentially the whole event table:
+// ~2.5s warm, ~8s cold — on the statement timeout, so it answered 500 under
+// load (caught by the dashboard partner flow). The console asks for 7 days.
+const HB_MAX_HOURS = 720;
 const HB_DEFAULT_BUCKET = 21600; // 6h
 const HB_MIN_BUCKET = 3600;
+const HB_MAX_BUCKETS = 720;
 const HB_MAX_BUCKET = 604800;
 const STREAM_MAX_CODES = 200;
 const STREAM_DEFAULT_LIMIT = 100;
@@ -398,14 +402,20 @@ function intParam(url: URL, name: string, fallback: number, min: number, max: nu
   return Math.min(max, Math.max(min, v));
 }
 
-async function rpcRows(
+/**
+ * The `<fn>_json` variant of a heartbeat RPC: the same rows as ONE jsonb
+ * array. A row-returning RPC is capped at PostgREST's max_rows (1000), which
+ * silently dropped the newest heartbeat buckets and the tail of the
+ * last-seen census (migration 20261006000100).
+ */
+async function rpcAll(
   db: SupabaseClient,
   fn: string,
   args: Record<string, unknown>,
 ): Promise<Row[]> {
-  const { data, error } = await db.schema("core").rpc(fn, args);
-  if (error) throw new Error(`${fn}: ${error.message}`);
-  return (data ?? []) as Row[];
+  const { data, error } = await db.schema("core").rpc(`${fn}_json`, args);
+  if (error) throw new Error(`${fn}_json: ${error.message}`);
+  return (Array.isArray(data) ? data : []) as Row[];
 }
 
 export async function getDashboardHeartbeat(
@@ -415,7 +425,14 @@ export async function getDashboardHeartbeat(
 ): Promise<Response> {
   const url = new URL(req.url);
   const hours = intParam(url, "hours", HB_DEFAULT_HOURS, 1, HB_MAX_HOURS);
-  const bucketSeconds = intParam(url, "bucket", HB_DEFAULT_BUCKET, HB_MIN_BUCKET, HB_MAX_BUCKET);
+  // At most HB_MAX_BUCKETS buckets per window: 90 days at one-hour buckets is
+  // ~20k rows and ~7.3s of aggregation, which sat on the statement timeout
+  // and answered 500 on two runs in three (caught by the dashboard partner
+  // flow). A request is widened to the nearest whole hour that fits; the
+  // payload's bucket_seconds always reports the width actually used.
+  const requested = intParam(url, "bucket", HB_DEFAULT_BUCKET, HB_MIN_BUCKET, HB_MAX_BUCKET);
+  const floorForWindow = Math.ceil((hours * 3600) / HB_MAX_BUCKETS / 3600) * 3600;
+  const bucketSeconds = Math.min(HB_MAX_BUCKET, Math.max(requested, floorForWindow));
   // ?last_seen=0 omits the all-time per-code census — the heaviest block of
   // the payload (~900 codes) and the slowest-moving. The UI fetches it once
   // per page load and skips it on refresh polls; `last_seen: null` means
@@ -425,15 +442,15 @@ export async function getDashboardHeartbeat(
   const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
   try {
     const [events, gate, lastSeen, gateLastSeen] = await Promise.all([
-      rpcRows(db, "event_heartbeat", { since, bucket_seconds: bucketSeconds }),
-      rpcRows(db, "gate_heartbeat", { since, bucket_seconds: bucketSeconds }),
-      wantLastSeen ? rpcRows(db, "event_last_seen", {}) : Promise.resolve(null),
+      rpcAll(db, "event_heartbeat", { since, bucket_seconds: bucketSeconds }),
+      rpcAll(db, "gate_heartbeat", { since, bucket_seconds: bucketSeconds }),
+      wantLastSeen ? rpcAll(db, "event_last_seen", {}) : Promise.resolve(null),
       // The gate tier's recency. Its evidence is control_result rows, not
       // events, so event_last_seen can never answer for it — which is how
       // every gate control rendered "LAST EVIDENCE: never" beside a live
       // sparkline. A handful of rows, so it rides every poll, not just the
       // first load.
-      rpcRows(db, "gate_last_seen", {}),
+      rpcAll(db, "gate_last_seen", {}),
     ]);
     return jsonResponse({
       generated_at: new Date().toISOString(),

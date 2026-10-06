@@ -1957,12 +1957,12 @@ paths:
       parameters:
       - name: hours
         in: query
-        description: Look-back window in hours (default 168).
+        description: Look-back window in hours (default 168, maximum 720 = 30 days; larger values are clamped and the response reports window_hours).
         schema:
           type: integer
       - name: bucket
         in: query
-        description: Bucket width in seconds (default 21600 = 6h).
+        description: Bucket width in seconds (default 21600 = 6h, minimum 3600). Widened to the nearest whole hour that keeps the window to at most 720 buckets; the response's bucket_seconds is the width actually used.
         schema:
           type: integer
       - name: last_seen
