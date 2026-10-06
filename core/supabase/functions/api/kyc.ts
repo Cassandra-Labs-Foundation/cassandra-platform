@@ -168,6 +168,10 @@ export async function postVerification(
     trust_level: trustLevel,
     ofac_result: ofac,
     match_status: ofac === "hit" ? "match" : "no_match",
+    // CIP evidence carries its provenance like every other evidence row; it
+    // was omitted here, so verifications read back as 'unknown' under any
+    // credential (caught by the contract suite, D5-A15)
+    provenance: provenanceFor("core", ctx),
   };
   const { error: insErr } = await db.schema("core").from("verification").insert(row);
   if (insErr) return internalErrorResponse(requestId, insErr);
