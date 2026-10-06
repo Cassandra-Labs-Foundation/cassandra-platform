@@ -53,12 +53,27 @@ export async function api(
   if (opts.key !== null) headers["X-Api-Key"] = opts.key ?? KEY;
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.idem !== null && method !== "GET") headers["Idempotency-Key"] = opts.idem ?? uid();
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  });
+  // A request that never left the machine (connection refused / no local
+  // port free — "error sending request") did nothing on the core, so it is
+  // retried with the SAME Idempotency-Key. Parallel flow runs open many
+  // connections at once and a transient local network blip otherwise fails
+  // whole flows. A timeout is NOT retried: the server may have acted.
+  let res: Response | undefined;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${API}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+      break;
+    } catch (e) {
+      const unsent = e instanceof TypeError && /error sending request|connection/i.test(e.message);
+      if (!unsent || attempt >= 3) throw e;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
   const text = await res.text();
   let parsed: Any = text;
   try {

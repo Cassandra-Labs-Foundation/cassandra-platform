@@ -129,9 +129,19 @@ export async function postAccessReview(
       type: "missing_field", field: "reviewer", message: "reviewer is required",
     }]);
   }
-  const { data: grants } = await db.schema(scope).from("access_grant")
-    .select("id, user_id, role, breakglass, reviewed_at").is("deprovisioned_at", null);
-  if (!grants || grants.length === 0) {
+  // Every LIVE grant, paged: an unpaged read stops at PostgREST's 1000-row
+  // cap, so past 1000 grants the review would silently attest a subset.
+  type Grant = { id: string; user_id: unknown; role: unknown; breakglass: unknown; reviewed_at: unknown };
+  const grants: Grant[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: page, error: gErr } = await db.schema(scope).from("access_grant")
+      .select("id, user_id, role, breakglass, reviewed_at").is("deprovisioned_at", null)
+      .order("id", { ascending: true }).range(from, from + 999);
+    if (gErr) return internalErrorResponse(requestId, gErr.message);
+    grants.push(...((page ?? []) as unknown as Grant[]));
+    if ((page ?? []).length < 1000) break;
+  }
+  if (grants.length === 0) {
     return apiError(409, "nothing_to_review", requestId, {
       title: "Nothing To Review",
       detail: "no live grants exist; an attestation over nothing attests nothing",
@@ -144,8 +154,16 @@ export async function postAccessReview(
     findings: `${grants.length} grants reviewed`,
     provenance: provenanceFor(scope, ctx),
   }, { onConflict: "id" });
+  // Stamp the reviewed grants in chunks (bounded URL length) rather than one
+  // round trip each: ~300 live grants took ~33s, and it grows with the
+  // population until it would outrun the edge-function limit mid-review.
+  const ids = grants.map((g) => g.id);
+  for (let i = 0; i < ids.length; i += 100) {
+    const { error: uErr } = await db.schema(scope).from("access_grant")
+      .update({ reviewed_at: now }).in("id", ids.slice(i, i + 100));
+    if (uErr) return internalErrorResponse(requestId, uErr.message);
+  }
   for (const g of grants) {
-    await db.schema(scope).from("access_grant").update({ reviewed_at: now }).eq("id", g.id);
     if (g.breakglass && !g.reviewed_at) {
       await emit(db, scope, `ev_${g.id}_bgrev`, "access.breakglass.reviewed",
         "access_grant", String(g.id), {

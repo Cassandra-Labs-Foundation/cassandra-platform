@@ -368,35 +368,37 @@ export async function postCalendarSweep(
     for (const c of (done ?? []) as unknown as { id: string }[]) completedCycles.add(String(c.id));
   }
 
+  // One batched upsert for every due/overdue event instead of two round trips
+  // per obligation: the sweep made ~140 sequential calls over the live
+  // calendar and took minutes. Event ids are deterministic per obligation and
+  // cycle, so ignoreDuplicates keeps it idempotent exactly as before.
+  const events: Record<string, unknown>[] = [];
+  const provenance = provenanceFor(scope, ctx);
+  const eventRow = (id: string, code: string, obligationId: string, payload: Record<string, unknown>) => ({
+    id, code, resource_type: "obligation", resource_id: `obligation:${obligationId}`, payload, provenance,
+  });
   for (const r of dueRows) {
     const id = String(r.id);
     const dueAt = String(r.next_due_at);
     const dueDay = dueAt.slice(0, 10);
-    try {
-      // The catalogue's OWN trigger code, so the control genuinely starts.
-      await emitGovernanceEvent(
-        db, scope, `evt_${id}_${dueDay}_due`, String(r.trigger_code), id,
-        { control_uid: r.control_uid, due_at: dueAt, cadence: r.cadence },
-        ctx,
-      );
-      fired.push({ id, trigger_code: String(r.trigger_code), due_at: dueAt });
+    // The catalogue's OWN trigger code, so the control genuinely starts.
+    events.push(eventRow(`evt_${id}_${dueDay}_due`, String(r.trigger_code), id,
+      { control_uid: r.control_uid, due_at: dueAt, cadence: r.cadence }));
+    fired.push({ id, trigger_code: String(r.trigger_code), due_at: dueAt });
 
-      const isOverdue = Date.parse(dueAt) < Date.parse(nowIso) &&
-        !completedCycles.has(cycleKey(id, dueAt));
-      if (isOverdue) {
-        const daysLate = Math.floor(
-          (Date.parse(nowIso) - Date.parse(dueAt)) / 86_400_000,
-        );
-        await emitGovernanceEvent(
-          db, scope, `evt_${id}_${dueDay}_overdue`, "governance.obligation.overdue", id,
-          { control_uid: r.control_uid, due_at: dueAt, days_late: daysLate },
-          ctx,
-        );
-        overdue.push({ id, trigger_code: String(r.trigger_code), due_at: dueAt, days_late: daysLate });
-      }
-    } catch (e) {
-      console.error(`calendar sweep failed for ${id}: ${e}`);
+    const isOverdue = Date.parse(dueAt) < Date.parse(nowIso) &&
+      !completedCycles.has(cycleKey(id, dueAt));
+    if (isOverdue) {
+      const daysLate = Math.floor((Date.parse(nowIso) - Date.parse(dueAt)) / 86_400_000);
+      events.push(eventRow(`evt_${id}_${dueDay}_overdue`, "governance.obligation.overdue", id,
+        { control_uid: r.control_uid, due_at: dueAt, days_late: daysLate }));
+      overdue.push({ id, trigger_code: String(r.trigger_code), due_at: dueAt, days_late: daysLate });
     }
+  }
+  if (events.length) {
+    const { error: evErr } = await db.schema(scope).from("event")
+      .upsert(events, { onConflict: "id", ignoreDuplicates: true });
+    if (evErr) return internalErrorResponse(requestId, evErr);
   }
 
   const { data: unsched, error: uErr } = await db.schema(scope).from("obligation")

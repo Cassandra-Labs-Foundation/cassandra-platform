@@ -11,11 +11,15 @@
 #   scripts/flow.sh --serial           no parallelism (debugging an interaction)
 #
 # Flow FILES run in parallel (deno test --parallel; FLOW_JOBS workers, default
-# 6), then the files marked `// flow-runner: serial` run alone, one after
-# another: they change or read instance-wide state (an institution freeze or
-# safe mode blocks every rail; exact dashboard deltas; the shared KRI), so
-# nothing may run beside them. A new flow that touches shared state must carry
-# the marker. --changed asks scripts/flow_select.py which flows a change
+# 10; full suite ~10 min). Two markers take a file out of that pool:
+#   // flow-runner: lane <name>  shares instance state only with its lane (the
+#      cash KRI people publishes and cash_ops reads; the shared partner's ACH
+#      limit eps sets): files in one lane run in sequence, and every lane runs
+#      ALONGSIDE the parallel pool.
+#   // flow-runner: serial       blocks or reads everything (an institution
+#      freeze or safe mode refuses every rail; exact dashboard deltas): these
+#      run last, alone, one after another.
+# A new flow that touches shared state must carry one of them. --changed asks scripts/flow_select.py which flows a change
 # reaches (spec paths of the edited handler module, its ledger, or ALL for
 # core-wide files like the payment gate).
 #
@@ -89,10 +93,14 @@ if [ "$CHANGED" = 1 ]; then
 else
   files=(core/verifier/flows/*.test.ts)
 fi
-par=(); ser=()
+par=(); ser=(); lanes=()
 for f in "${files[@]}"; do
-  if [ "$SERIAL_ALL" = 1 ] || grep -q "flow-runner: serial" "$f"; then ser+=("$f"); else par+=("$f"); fi
+  lane=$(grep -m1 -oE "flow-runner: lane [a-z0-9_-]+" "$f" | awk '{print $3}' || true)
+  if [ "$SERIAL_ALL" = 1 ] || grep -q "flow-runner: serial" "$f"; then ser+=("$f")
+  elif [ -n "$lane" ]; then lanes+=("$lane:$f")
+  else par+=("$f"); fi
 done
+lane_names=$(for l in "${lanes[@]}"; do echo "${l%%:*}"; done | sort -u)
 
 base_args=(--no-check --allow-net --allow-env)
 [ -n "$FILTER" ] && base_args=(--filter "$FILTER" "${base_args[@]}")
@@ -101,7 +109,7 @@ base_args=(--no-check --allow-net --allow-env)
 run_group() {
   local label="$1"; shift
   local out ok summary
-  out=$(NO_COLOR=1 DENO_JOBS="${FLOW_JOBS:-6}" deno test "$@" 2>&1) && ok=1 || ok=0
+  out=$(NO_COLOR=1 DENO_JOBS="${FLOW_JOBS:-10}" deno test "$@" 2>&1) && ok=1 || ok=0
   # `|| true`: no summary line (a type error, a crash) must reach the
   # fallback below, not kill the script silently under pipefail
   summary=$(grep -E '^(ok|FAILED) \|' <<<"$out" | tail -1 || true)
@@ -114,14 +122,27 @@ run_group() {
   [ "$ok" = 1 ]
 }
 
+LOGDIR=$(mktemp -d)
 pass=0
 for i in $(seq 1 "$RUNS"); do
   t0=$SECONDS; green=1
   echo "run $i:"
-  if [ ${#par[@]} -gt 0 ]; then run_group "parallel (${#par[@]} files)" --parallel "${base_args[@]}" "${par[@]}" || green=0; fi
+  # the parallel pool and every lane, concurrently; each reports when all finish
+  pids=()
+  if [ ${#par[@]} -gt 0 ]; then
+    ( run_group "parallel (${#par[@]} files)" --parallel "${base_args[@]}" "${par[@]}" ) > "$LOGDIR/par" 2>&1 & pids+=($!)
+  fi
+  for ln in $lane_names; do
+    lf=(); for l in "${lanes[@]}"; do [ "${l%%:*}" = "$ln" ] && lf+=("${l#*:}"); done
+    ( run_group "lane $ln (${#lf[@]} files)" "${base_args[@]}" "${lf[@]}" ) > "$LOGDIR/lane_$ln" 2>&1 & pids+=($!)
+  done
+  for p in "${pids[@]}"; do wait "$p" || green=0; done
+  cat "$LOGDIR"/par "$LOGDIR"/lane_* 2>/dev/null || true
+  rm -f "$LOGDIR"/par "$LOGDIR"/lane_*
   if [ ${#ser[@]} -gt 0 ]; then run_group "serial (${#ser[@]} files)" "${base_args[@]}" "${ser[@]}" || green=0; fi
   echo "  $([ "$green" = 1 ] && echo ok || echo FAILED) in $((SECONDS - t0))s"
   [ "$green" = 1 ] && pass=$((pass + 1))
 done
+rm -rf "$LOGDIR"
 [ "$RUNS" -gt 1 ] && echo "$pass/$RUNS runs green"
 [ "$pass" = "$RUNS" ]

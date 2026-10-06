@@ -557,8 +557,20 @@ export function makeDrillDb(): DrillDb {
               // because the real PostgREST client supports upsert().select()
               // and a fake that does not forces production code to contort
               // around the test harness rather than the other way round.
+              // An ARRAY is a bulk upsert, as in the real client: each row
+              // upserts in order; the first failure stops it.
               const run = (): Any => {
-                const row = applyDefaults(rawRow, table, new Date().toISOString());
+                if (!Array.isArray(rawRow)) return runOne(rawRow);
+                const out: Any[] = [];
+                for (const r of rawRow) {
+                  const v = runOne(r);
+                  if (v.error) return v;
+                  out.push(v.data);
+                }
+                return { data: out, error: null };
+              };
+              const runOne = (one: Any): Any => {
+                const row = applyDefaults(one, table, new Date().toISOString());
                 const idx = rows[key].findIndex((r) => r.id === row.id);
                 if (idx >= 0) {
                   if (opts?.ignoreDuplicates) return { data: rows[key][idx], error: null };
