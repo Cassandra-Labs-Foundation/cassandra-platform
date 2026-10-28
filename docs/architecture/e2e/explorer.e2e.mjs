@@ -37,8 +37,9 @@ test.before(async () => {
     server = createServer((req, res) => {
       const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
       const file = join(DOCS, path.endsWith('/') ? path + 'index.html' : path);
-      try { res.writeHead(200, {'content-type': TYPES[extname(file)] || 'application/octet-stream'}); res.end(readFileSync(file)); }
-      catch { res.writeHead(404); res.end(); }
+      let body;
+      try { body = readFileSync(file); } catch { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, {'content-type': TYPES[extname(file)] || 'application/octet-stream'}); res.end(body);
     });
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     base = `http://127.0.0.1:${server.address().port}`;
@@ -276,6 +277,29 @@ test('old permalinks still land on the traced BSA-06 views', async () => {
     if (want.startsWith('Transaction')) await page.waitForFunction(() => location.hash === '#/control/' + encodeURIComponent('bsa:BSA-06'));
     assert.equal(await title(), want, hash);
   }
+});
+
+test('when traced code changed after review, the traced views say so and the rest do not', async () => {
+  const report = {revision: '4da737a9f74f0db3c5b3b41c0e692be14e1b8440', changed: ['core/supabase/functions/api/bsa.ts']};
+  await page.route('**/architecture/stale.json', r => r.fulfill({json: report}));
+  try {
+    for (const [hash, shown] of [['#/control/bsa:BSA-06', true], ['#/process/detect', true], ['#/implementation/threshold', true], ['#/routing', true],
+      ['#/overview', false], ['#/module/bsa', false], ['#/control/bsa:BSA-07', false]]) {
+      await page.goto(`${base}/architecture/${hash}`);
+      await page.reload();   // a hash-only goto keeps the loaded page, and the report is read at load
+      await page.locator('[data-flow] [data-diagram]').first().waitFor();
+      const bar = page.locator('[data-stale]');
+      if (shown) await bar.waitFor({state: 'visible', timeout: 3000}).catch(() => {});
+      else await page.waitForTimeout(300);
+      assert.equal(await bar.isVisible(), shown, hash);
+      if (shown) assert.match(await bar.innerText(), /bsa\.ts.*changed|changed.*bsa\.ts/s, hash);
+    }
+  } finally { await page.unroute('**/architecture/stale.json'); }
+  await page.goto(`${base}/architecture/#/control/bsa:BSA-06`);
+  await page.reload();
+  await page.locator('[data-flow] [data-diagram]').first().waitFor();
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('[data-stale]').isVisible(), false, 'an empty report shows no banner');
 });
 
 test('no script or console errors along the way', () => {

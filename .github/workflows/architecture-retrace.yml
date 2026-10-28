@@ -1,0 +1,93 @@
+name: architecture-retrace
+
+# The hand-traced BSA-06 path (docs/architecture/model.json) interprets source
+# at one revision, so it cannot regenerate itself: check_architecture.py fails
+# when a traced source changes. When that happens on main, an agent re-reads the
+# changed code, updates the claims it can verify, and opens a pull request. A
+# person reviews the claims before merging; that review is what restamps the
+# fingerprints. Until then the explorer shows the stale banner on traced views.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/supabase/functions/api/transfers.ts"
+      - "core/supabase/functions/api/bsa.ts"
+      - "core/supabase/functions/api/index.ts"
+      - "core/supabase/functions/api/auth.ts"
+      - "core/supabase/functions/api/ach.ts"
+      - "core/supabase/functions/api/wires.ts"
+      - "core/supabase/functions/api/cards.ts"
+      - "core/supabase/functions/api/cda.ts"
+      - "core/verifier/flows/transfers.test.ts"
+      - "core/verifier/flows/onboard_transfer_large_txn.test.ts"
+      - "core/verifier/flows/bsa.test.ts"
+      - "compliance/policies/bsa/bsa.md"
+      - "scripts/rebuild_artifacts.sh"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-check every traced claim even if no fingerprint is stale"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: architecture-retrace
+  cancel-in-progress: true
+
+jobs:
+  retrace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Which traced sources changed since review
+        id: stale
+        run: |
+          python3 -m pip install pyyaml
+          python3 scripts/check_architecture.py --stale-report /tmp/stale.json || true
+          cat /tmp/stale.json
+          n=$(python3 -c "import json;print(len(json.load(open('/tmp/stale.json'))['changed']))")
+          echo "changed=$n" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.stale.outputs.changed != '0' || inputs.force
+        with:
+          node-version: 22
+      - name: Install the browser harness
+        if: steps.stale.outputs.changed != '0' || inputs.force
+        working-directory: docs/architecture/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Re-trace the changed claims
+        if: steps.stale.outputs.changed != '0' || inputs.force
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude -p --allowedTools "Read,Edit,Write,Bash" --max-turns 150 "Re-trace the hand-traced BSA-06 path in docs/architecture/model.json against the current source. First read .skills/visual-control-architecture/SKILL.md and its references. /tmp/stale.json lists the traced sources whose fingerprints no longer match (it may be empty when this run re-checks every claim); its revision is the one the path was traced at. Use 'git diff <revision>..HEAD -- <file>' to see what changed. For every node and internal step that depends on a changed source, re-read the code and update only what the code now establishes: the behavior text, file and line, test and test line, internals, and the intent/boundary text if the change affects them. Keep policy intent, implemented behavior and review boundaries separate, and do not infer enforcement from names. Then set snapshot.revision to the current HEAD commit and recompute the sha256 fingerprint of each source you re-read; leave a fingerprint stale if you could not verify its claims. Also update docs/architecture/review/answers.md if an expected answer changed. Run python3 scripts/check_architecture.py, node --test docs/architecture/navigation.test.mjs and (cd docs/architecture/e2e && npm test) until they pass. Finally write /tmp/pr.md: for each claim you changed, the old claim, the new claim and the code that establishes it (file:line); then every claim you could not verify; then a line telling the reviewer to read the claims against the code before merging. If nothing changed, write 'No traced claim changed.' to /tmp/pr.md and change no files."
+          test -s /tmp/pr.md
+      - name: Propose the re-trace for review
+        if: steps.stale.outputs.changed != '0' || inputs.force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/architecture; then
+            echo "No traced claim changed."; cat /tmp/pr.md; exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B architecture-retrace
+          git add docs/architecture/model.json docs/architecture/review/answers.md
+          git commit -m "docs(architecture): re-trace BSA-06 after ${GITHUB_SHA::7} (needs human review)"
+          git push -f origin architecture-retrace
+          if gh pr view architecture-retrace --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit architecture-retrace --body-file /tmp/pr.md
+          else
+            gh pr create --head architecture-retrace --base main --title "Re-trace BSA-06 after ${GITHUB_SHA::7} (needs human review)" --body-file /tmp/pr.md
+          fi

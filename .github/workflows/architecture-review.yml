@@ -1,0 +1,114 @@
+name: architecture-review
+
+# Weekly comprehension review of the live architecture explorer. A reader who
+# has never seen the system answers docs/architecture/review/questions.md from
+# screenshots alone; a grader scores the answers against answers.md; the score
+# is appended to review/history.md so rounds can be compared over time.
+on:
+  schedule:
+    - cron: "0 14 * * 1"   # Mondays 14:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: architecture-review
+  cancel-in-progress: false
+
+env:
+  SITE: https://cassandra-labs-foundation.github.io/cassandra-platform
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Screenshot and score every live view
+        working-directory: docs/architecture/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run shots -- ../../../explorer-shots "$SITE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: explorer-shots
+          path: explorer-shots
+
+  blind-read:
+    needs: shots
+    runs-on: ubuntu-latest
+    steps:
+      # Deliberately no checkout: the reader sees the screenshots and the
+      # questions, never the source, the model or the expected answers.
+      - uses: actions/download-artifact@v4
+        with:
+          name: explorer-shots
+          path: shots
+      - name: Fetch the questions only
+        run: |
+          rm -f shots/scores.json shots/scores.md
+          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docs/architecture/review/questions.md" -o questions.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Answer from the screenshots alone
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude -p --allowedTools "Read,Write" --max-turns 80 "You are reviewing documentation for a banking system you have never seen. The only material you may use is the PNG screenshots in ./shots (each file is one page of an architecture explorer; names ending -eng show the same page with engineering detail) and ./questions.md. Read questions.md, then look at as many screenshots as you need. Answer every question from what the screenshots show, not from general knowledge; if a screenshot does not show the answer, say 'not shown' rather than guessing. Write ./answers.md with one numbered entry per question: the answer in one or two sentences, then 'Relied on:' and the screenshot file names."
+          test -s answers.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reader-answers
+          path: answers.md
+
+  grade:
+    needs: blind-read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: reader-answers
+          path: reader
+      - uses: actions/download-artifact@v4
+        with:
+          name: explorer-shots
+          path: explorer-shots
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Grade the answers
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude -p --allowedTools "Read,Write" --max-turns 30 "Grade a reader's answers about an architecture explorer. Read docs/architecture/review/answers.md (the expected answers and the grading rule) and reader/answers.md (the reader's answers). For each question decide correct, partial or wrong strictly by the grading rule; 'not shown' is wrong. Write ./grade.md: a markdown table with columns #, verdict, why (one short sentence), then a blank line, then exactly one final line of the form 'SCORE <points>/<questions> MISSED <comma-separated question numbers that were not correct, or none>' where correct counts 1 and partial counts 0.5."
+          test -s grade.md
+          tail -1 grade.md | grep -E '^SCORE [0-9.]+/[0-9]+ MISSED '
+      - name: Record the score
+        run: |
+          set -euo pipefail
+          line=$(tail -1 grade.md)
+          score=$(echo "$line" | awk '{print $2}')
+          missed=$(echo "$line" | sed 's/.*MISSED //')
+          tallest=$(node -e "const s=require('./explorer-shots/scores.json');const t=s.reduce((a,b)=>b.height>a.height?b:a);console.log(decodeURIComponent(t.view)+' · '+t.height+'px')")
+          echo "| $(date -u +%F) | ${GITHUB_SHA::7} | $score | $missed | $tallest |" >> docs/architecture/review/history.md
+          { echo '## Comprehension'; echo; cat grade.md; echo; echo '## Reader answers'; echo; cat reader/answers.md; echo; echo '## Layout scores'; echo; cat explorer-shots/scores.md; } >> "$GITHUB_STEP_SUMMARY"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/architecture/review/history.md
+          git commit -m "chore(architecture): weekly explorer review — comprehension $score"
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review
+          path: |
+            grade.md
+            reader/answers.md

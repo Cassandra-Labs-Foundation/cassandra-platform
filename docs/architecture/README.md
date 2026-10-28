@@ -18,6 +18,15 @@ The traced path is `model.json`, a manually traced source snapshot. Its footer i
 
 The payment gate is implemented in `core/supabase/functions/api/transfers.ts` and contains explicit checks. The extracted control catalogue and crosswalk are documentation and evidence inputs. They should not be described as a runtime rules interpreter. CDA has its own funding gate. Coverage must be established from actual call sites and early returns, not from an "all rails" label.
 
+## How it stays current
+
+Each layer regenerates differently, because one is derived and the other is read.
+
+- **The inventory regenerates on every change.** The artifact rebuild runs on any change to its inputs (the spec, the API and other edge functions, shared code, migrations, console pages, analytics, CI workflows, policies and the control results) and commits the new `system.json`. The Pages deploy also regenerates it from the pushed tree, so the live site always reflects `main`.
+- **The traced path is re-read, not regenerated.** When a traced source changes, the deploy still publishes, and the traced views show a banner naming what changed since the reviewed revision (from `stale.json`, written by `check_architecture.py --stale-report`); doc-gate goes red. `architecture-retrace` then has an agent re-read the changed code, update the claims it can verify and open a pull request listing each old and new claim against the code. A person reads those claims before merging; the merge is what restamps the fingerprints.
+- **Every deploy is checked on the live site.** After each Pages deploy, `verify-live` waits until the site serves the new commit, runs the end-to-end suite against it, screenshots and scores every view, and posts the scores in the run summary.
+- **Comprehension is reviewed weekly.** `architecture-review` gives a reader that has never seen the system only screenshots and [the questions](review/questions.md), grades its answers against [the expected answers](review/answers.md) and appends the score to [the history](review/history.md). [The design-round prompt](review/ROUND.md) starts from that score; run it whenever the score drops or a view needs work.
+
 ## Maintain the model
 
 - `system.json` is generated; never edit it. `scripts/rebuild_artifacts.sh` regenerates it. The Pages workflow also regenerates it from the pushed tree before publishing, so the live site always reflects `main`.
@@ -45,6 +54,6 @@ npm test                                                                  # serv
 BASE_URL=https://cassandra-labs-foundation.github.io/cassandra-platform npm test  # the published site
 ```
 
-For a by-eye review, `npm run shots -- <dir>` (in the same folder) screenshots every kind of view, plain and with Engineering detail. To inspect the explorer by hand, serve the repository's `docs/` directory with any local HTTP server and open `/architecture/`. Opening it straight from the filesystem doesn't work, because the page loads its models over HTTP. Old overview, containers, components and walkthroughs hashes remain usable.
+For a by-eye review, `npm run shots -- <dir> [base-url]` (in the same folder) screenshots every kind of view, plain and with Engineering detail, and writes each view's resting-picture scores to `scores.json` and `scores.md`. To inspect the explorer by hand, serve the repository's `docs/` directory with any local HTTP server and open `/architecture/`. Opening it straight from the filesystem doesn't work, because the page loads its models over HTTP. Old overview, containers, components and walkthroughs hashes remain usable.
 
 Current repository-wide counts remain in [STATE.md](../../STATE.md). The explorer is a human review surface, not operational monitoring or an automated compliance verdict.

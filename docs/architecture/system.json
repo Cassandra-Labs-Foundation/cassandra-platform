@@ -12,7 +12,7 @@
   "machines": 25,
   "files": 32,
   "steps": 19,
-  "workflows": 10
+  "workflows": 12
  },
  "containers": [
   {
@@ -70332,6 +70332,38 @@
     "analytics/report_5300.sh"
    ]
   },
+  "architecture-retrace.yml": {
+   "name": "architecture-retrace",
+   "file": ".github/workflows/architecture-retrace.yml",
+   "triggers": [
+    "push",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "core/supabase/functions/api/ach.ts",
+    "core/supabase/functions/api/auth.ts",
+    "core/supabase/functions/api/bsa.ts",
+    "core/supabase/functions/api/cards.ts",
+    "core/supabase/functions/api/cda.ts",
+    "core/supabase/functions/api/index.ts",
+    "core/supabase/functions/api/transfers.ts",
+    "core/supabase/functions/api/wires.ts",
+    "core/verifier/flows/bsa.test.ts",
+    "core/verifier/flows/onboard_transfer_large_txn.test.ts",
+    "core/verifier/flows/transfers.test.ts",
+    "scripts/check_architecture.py",
+    "scripts/rebuild_artifacts.sh"
+   ]
+  },
+  "architecture-review.yml": {
+   "name": "architecture-review",
+   "file": ".github/workflows/architecture-review.yml",
+   "triggers": [
+    "schedule",
+    "workflow_dispatch"
+   ],
+   "runs": []
+  },
   "contract-tests.yml": {
    "name": "contract-tests",
    "file": ".github/workflows/contract-tests.yml",
@@ -70540,6 +70572,12 @@
    "to": "analytics",
    "kind": "runs",
    "count": 4
+  },
+  {
+   "from": "ci:architecture-retrace.yml",
+   "to": "api",
+   "kind": "runs",
+   "count": 8
   },
   {
    "from": "ci:core-ci.yml",

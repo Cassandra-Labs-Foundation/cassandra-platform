@@ -44,6 +44,17 @@ on:
       - "core/verifier/flows/*.test.ts"        # architecture inventory: which flows call which paths
       - "control-tests.json"
       - "docs/architecture/model.json"         # names the hand-traced control
+      # The rest of the architecture inventory's inputs (gen_architecture.py),
+      # so a console, edge-function, analytics or CI change refreshes system.json too.
+      - "ui/src/pages/**"
+      - "core/supabase/functions/aggregator/**"
+      - "core/supabase/functions/blnk-webhook/**"
+      - "core/supabase/functions/blnk-reconcile/**"
+      - "core/supabase/functions/_shared/**"
+      - "analytics/**"
+      - ".github/workflows/*.yml"
+      - "control-scope.json"
+      - "control-tests-live.json"
   # PRs run the full rebuild + every gate but SKIP the commit step, so
   # divergence surfaces on the PR instead of post-merge on main.
   pull_request:
@@ -62,6 +73,15 @@ on:
       - "core/verifier/flows/*.test.ts"
       - "control-tests.json"
       - "docs/architecture/model.json"
+      - "ui/src/pages/**"
+      - "core/supabase/functions/aggregator/**"
+      - "core/supabase/functions/blnk-webhook/**"
+      - "core/supabase/functions/blnk-reconcile/**"
+      - "core/supabase/functions/_shared/**"
+      - "analytics/**"
+      - ".github/workflows/*.yml"
+      - "control-scope.json"
+      - "control-tests-live.json"
   workflow_dispatch: {}      # manual full rebuild
 
 permissions:

@@ -54,8 +54,12 @@ jobs:
           python3 scripts/gen_architecture.py
 
       - name: Validate architecture snapshot and navigation
+        # A hand-traced source that changed since review is written to
+        # stale.json (the traced views show it) instead of blocking the deploy:
+        # the generated inventory must publish on every change. doc-gate stays
+        # strict, and architecture-retrace proposes the re-trace for review.
         run: |
-          python3 scripts/check_architecture.py
+          python3 scripts/check_architecture.py --stale-report docs/architecture/stale.json
           node --test docs/architecture/navigation.test.mjs
 
       - name: Stage the architecture tour one level down
@@ -74,6 +78,7 @@ jobs:
           test -f _site/architecture/system.json
           test -f _site/architecture/inventory.mjs
           test -f _site/architecture/diagram.mjs
+          test -f _site/architecture/stale.json
           echo "staged $(find _site -type f | wc -l) files"
 
       - uses: actions/configure-pages@v5
@@ -82,3 +87,49 @@ jobs:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Every deploy is verified on the live site the way a reviewer uses it, and
+  # each view's resting picture is scored so runs can be compared.
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the browser harness
+        working-directory: docs/architecture/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Wait until the live site serves this commit's explorer
+        run: |
+          for f in explorer.mjs inventory.mjs diagram.mjs; do
+            for i in $(seq 1 30); do
+              curl -fsS "$SITE/architecture/$f" | cmp -s - "docs/architecture/$f" && continue 2
+              sleep 10
+            done
+            echo "live $f never matched this commit"; exit 1
+          done
+        env:
+          SITE: https://cassandra-labs-foundation.github.io/cassandra-platform
+      - name: End-to-end walk of the live explorer
+        working-directory: docs/architecture/e2e
+        env:
+          BASE_URL: https://cassandra-labs-foundation.github.io/cassandra-platform
+        run: npm test
+      - name: Screenshot and score every view
+        if: always()
+        working-directory: docs/architecture/e2e
+        run: |
+          npm run shots -- ../../../explorer-shots https://cassandra-labs-foundation.github.io/cassandra-platform
+          { echo '## Architecture explorer · live scores'; echo; cat ../../../explorer-shots/scores.md; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: explorer-shots
+          path: explorer-shots
+          retention-days: 30

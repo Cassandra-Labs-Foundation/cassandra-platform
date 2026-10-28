@@ -54,8 +54,22 @@ def validate(root=ROOT):
         errors.append(f"model.json names a control the catalogue lacks: {model.get('control')}")
     return errors
 
+STALE = 'Source changed; review affected architecture claims: '
+
 if __name__ == '__main__':
+    import sys
     problems = validate()
+    # --stale-report PATH: for the Pages deploy. A traced source that changed is
+    # recorded in PATH (the explorer shows it on the traced views) instead of
+    # failing, so the generated inventory still publishes; doc-gate stays strict.
+    if '--stale-report' in sys.argv:
+        out = ROOT / sys.argv[sys.argv.index('--stale-report') + 1]
+        changed = [p.removeprefix(STALE) for p in problems if p.startswith(STALE)]
+        problems = [p for p in problems if not p.startswith(STALE)]
+        revision = json.loads((ROOT / 'docs/architecture/model.json').read_text())['snapshot']['revision']
+        out.write_text(json.dumps({'revision': revision, 'changed': changed}, indent=1) + '\n')
+        if changed:
+            print(f'Traced sources changed since {revision[:7]} (shown on the traced views): ' + ', '.join(changed))
     if problems:
         print('\n'.join(problems))
         raise SystemExit(1)

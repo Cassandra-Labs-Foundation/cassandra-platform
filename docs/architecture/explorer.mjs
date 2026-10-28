@@ -2,7 +2,7 @@ import {decodeRoute} from './navigation.mjs';
 import {inventory,overviewFlow,apiFlow,pipelineFlow} from './inventory.mjs';
 import {diagram,drawDiagrams} from './diagram.mjs';
 const root=document.getElementById('control-atlas');
-let model,sys;
+let model,sys,stale=null;
 try{
   const responses=await Promise.all(['./model.json','./system.json'].map(file=>fetch(file)));
   if(responses.some(response=>!response.ok))throw new Error('Unable to load the architecture model');
@@ -12,6 +12,10 @@ try{
   throw error;
 }
 const {nodes,groups,internals,snapshot}=model;
+// Written by the Pages deploy when a hand-traced source changed after review.
+fetch('./stale.json').then(r=>r.ok?r.json():null).then(s=>{if(s?.changed?.length){stale=s;render();}}).catch(()=>{});
+function staleBar(traced){const el=root.querySelector('[data-stale]');el.hidden=!(traced&&stale);
+ if(traced&&stale)el.innerHTML=`<b>The code behind this traced path changed after it was reviewed.</b> It was read at <code>${esc(stale.revision.slice(0,7))}</code>; since then ${stale.changed.map(f=>`<code>${esc(f.split('/').pop())}</code>`).join(', ')} changed, so its claims may be out of date until it is traced again. The generated inventory is current.`;}
 // BSA-06's control page draws its traced processes inside the control's own box.
 const inv=inventory(sys,{processes:['detect','triage','decide'].map(id=>({id,kind:'Process · traced by hand',title:groups[id].title,sub:groups[id].sub,tech:Object.keys(nodes).filter(n=>nodes[n].stage===id).join(' · ')})),
  edges:[{from:'detect',to:'triage',label:'open alert'},{from:'triage',to:'decide',label:'escalated investigation'}]});
@@ -83,6 +87,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const flowEl=root.querySelector('[data-flow]');
 function paint(html){flowEl.innerHTML=html;drawDiagrams(flowEl);}
 function renderGenerated(r){
+ staleBar(r.kind==='control'&&r.id===model.control);
  const crumbs=inv.crumbs(r);
  root.querySelector('[data-title]').textContent=inv.title(r);
  root.querySelector('[data-scope]').textContent=inv.scope(r);
@@ -95,6 +100,7 @@ function render(){
 root.querySelector('[data-engineering]').checked=state.engineering;
 const generated=inv.resolve(state);
 if(generated)return renderGenerated(generated);
+staleBar(['routing','rails','group','node'].includes(state.view));
 if(state.view==='control'){location.replace('#/control/'+encodeURIComponent(model.control));return;}
 if(state.id||state.view==='policy')state={...state,view:'overview',id:null};
 const eng=state.engineering;
