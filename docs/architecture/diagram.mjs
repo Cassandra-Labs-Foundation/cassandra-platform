@@ -33,6 +33,7 @@ export function diagram(spec,eng=false){
  const rows=spec.rows.map(row=>{if(Array.isArray(row))return rowHtml(row);
   const gid=row.id||'g:'+row.frame;ids.add(gid);const inner=row.rows.map(rowHtml).join('');
   members[gid]=row.rows.flat().flatMap(g=>g.nodes.filter(n=>n.tone!=='more').map(n=>n.id));
+  if(members[gid].length>1)members[gid].forEach(id=>owner[id]??=gid);
   return inner?`<div class="dframe" data-dgroup="${esc(gid)}"><span class="dglabel">${esc(row.frame)}</span>${inner}</div>`:'';}).join('');
  const all=spec.rows.flatMap(r=>Array.isArray(r)?[r]:r.rows);
  const raw=bundle(spec.edges.filter(e=>ids.has(e.from)&&ids.has(e.to)&&e.from!==e.to),members);
@@ -92,7 +93,9 @@ function draw(d){
  for(const r of [...nodes].sort((a,b)=>a.t-b.t)){const b=bands.at(-1);if(b&&r.t<b.b-4){b.b=Math.max(b.b,r.b);b.items.push(r);}else bands.push({t:r.t,b:r.b,items:[r]});}
  const gap=k=>k<0?bands[0].t-14:k>=bands.length-1?bands.at(-1).b+14:(bands[k].b+bands[k+1].t)/2;
  const bandAt=y=>{let k=bands.findIndex(b=>y>=b.t-2&&y<=b.b+2);if(k<0)k=bands.findIndex(b=>b.t>y)-1;return Math.max(0,k<0?bands.length-1:k);};
- const find=id=>{const el=d.querySelector(`[data-dnode="${CSS.escape(id)}"]`)||d.querySelector(`[data-dgroup="${CSS.escape(id)}"]`);if(!el)return null;const r=R(el);r.group=!el.dataset.dnode;r.top=bandAt(r.group?r.t+30:(r.t+r.b)/2);r.bot=bandAt(r.group?r.b-4:(r.t+r.b)/2);return r;};
+ const find=id=>{const el=d.querySelector(`[data-dnode="${CSS.escape(id)}"]`)||d.querySelector(`[data-dgroup="${CSS.escape(id)}"]`);if(!el)return null;const r=R(el);r.group=!el.dataset.dnode;
+  if(r.group){const inside=bands.map((b,k)=>b.t>=r.t-1&&b.b<=r.b+1?k:-1).filter(k=>k>=0);r.top=inside[0]??bandAt(r.t+30);r.bot=inside.at(-1)??bandAt(r.b-4);}
+  else r.top=r.bot=bandAt((r.t+r.b)/2);return r;};
  const used={};
  function channel(k,want){const m=10,obs=bands[k].items.map(r=>[r.l-m,r.r+m]).sort((a,b)=>a[0]-b[0]);
   const free=[];let x=4;for(const [a,b] of obs){if(a>x)free.push([x,a]);x=Math.max(x,b);}if(x<W-4)free.push([x,W-4]);
@@ -110,7 +113,12 @@ function draw(d){
  const crowded=routes.filter(r=>r.span>1).length>2||routes.length>10;
  // A row-skipping edge rests out of view only when both of its boxes keep another edge.
  const short={};routes.forEach(r=>{if(r.span<=1){short[r.e.from]=1;short[r.e.to]=1;}});
- routes.forEach(r=>{r.defer=crowded&&r.span>1&&short[r.e.from]&&short[r.e.to];});
+ // A box counts as connected when it, its frame or a box inside it has a resting edge.
+ const el=id=>d.querySelector(`[data-dnode="${CSS.escape(id)}"]`)||d.querySelector(`[data-dgroup="${CSS.escape(id)}"]`);
+ const linked=id=>{const x=el(id);if(!x)return false;if(short[id])return true;
+  for(let a=x.parentElement;a&&a!==d;a=a.parentElement)if(a.dataset.dgroup&&short[a.dataset.dgroup])return true;
+  return [...x.querySelectorAll('[data-dnode],[data-dgroup]')].some(c=>short[c.dataset.dnode||c.dataset.dgroup]);};
+ routes.forEach(r=>{r.defer=crowded&&r.span>1&&linked(r.e.from)&&linked(r.e.to);});
  routes.forEach(r=>{if(r.span>1&&!r.defer){short[r.e.from]=1;short[r.e.to]=1;}});
  // One entry (and one exit) point per box side and line style.
  const slot={solid:0,dashed:.22,dotted:-.22};

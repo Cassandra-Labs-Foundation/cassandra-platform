@@ -115,15 +115,18 @@ test('every policy and every control is reachable from Policies & controls', asy
   assert.equal(controls.size, CONTROLS);
 });
 
-test('a reviewer drills BSA policy → BSA-06 → its traced path → one decision, and back', async () => {
+test('a reviewer drills BSA policy → BSA-06, opened in place → one decision, and back', async () => {
   await open('#/policy/bsa');
   await map().locator('a[href="#/control/bsa:BSA-06"]').first().click();
   assert.match(await title(), /Transaction Monitoring/i);
   const leaf = await page.locator('[data-flow]').innerText() + await page.locator('[data-inspector]').innerText();
   for (const fact of ['bsa_alert.created', 'Hermetic', 'Live', 'In scope']) assert.ok(leaf.includes(fact), `control leaf shows ${fact}`);
   await map().locator('a[href="#/module/bsa"]').first().waitFor();
-  await map().getByRole('link', {name: /traced implementation path/i}).click();
-  await map().locator('[data-open-group="detect"]').click();
+  // The traced processes are drawn inside BSA-06's own box: no separate "traced path" level.
+  const frame = map().locator('[data-dgroup="c:bsa:BSA-06"]');
+  for (const p of ['detect', 'triage', 'decide']) await frame.locator(`a[href="#/process/${p}"]`).waitFor();
+  await frame.locator('a[href="#/process/detect"]').click();
+  assert.deepEqual(await crumbs().innerText().then(t => t.split(/\s*›\s*/).slice(-2)), ['BSA-06', 'Large-movement detection']);
   await map().locator('[data-open-node="threshold"]').click();
   assert.equal(await title(), 'Movement greater than $10,000?');
   await crumbs().getByRole('button', {name: 'BSA-06'}).click();
@@ -189,7 +192,7 @@ const EVERY_VIEW = ['#/overview', '#/api', '#/domain/payments', '#/module/transf
   '#/container/blnk-reconcile', '#/container/drill', '#/container/_shared', '#/container/analytics', `#/file/${encodeURIComponent('drill/run.ts')}`,
   '#/container/postgres', '#/table/core.account', '#/machine/Account', '#/container/ui', `#/page/${encodeURIComponent('compliance.jsx')}`,
   '#/container/blnk', '#/pipeline', `#/step/${encodeURIComponent('scripts/gen_architecture.py')}`,
-  '#/routing', '#/rails', '#/control', '#/process/detect', '#/process/triage', '#/process/decide', '#/implementation/threshold'];
+  '#/routing', '#/rails', '#/process/detect', '#/process/triage', '#/process/decide', '#/implementation/threshold'];
 const toggle = async on => { const box = page.locator('[data-engineering]'); if (await box.isChecked() !== on) await box.click(); };
 
 test('every view is a flow diagram: boxes joined by drawn, labeled edges', async () => {
@@ -268,8 +271,9 @@ test('Engineering detail changes every view, adding identifiers to the boxes', a
 });
 
 test('old permalinks still land on the traced BSA-06 views', async () => {
-  for (const [hash, want] of [['#/control', 'Transaction monitoring & case management'], ['#/walkthroughs', 'Transaction monitoring & case management'], ['#/process/triage', 'Alert triage & investigation'], ['#/components', 'Core API']]) {
+  for (const [hash, want] of [['#/control', 'Transaction Monitoring & Case Management'], ['#/walkthroughs', 'Transaction Monitoring & Case Management'], ['#/process/triage', 'Alert triage & investigation'], ['#/components', 'Core API']]) {
     await open(hash);
+    if (want.startsWith('Transaction')) await page.waitForFunction(() => location.hash === '#/control/' + encodeURIComponent('bsa:BSA-06'));
     assert.equal(await title(), want, hash);
   }
 });

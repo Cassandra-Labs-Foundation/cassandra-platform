@@ -12,7 +12,9 @@ try{
   throw error;
 }
 const {nodes,groups,internals,snapshot}=model;
-const inv=inventory(sys);
+// BSA-06's control page draws its traced processes inside the control's own box.
+const inv=inventory(sys,{processes:['detect','triage','decide'].map(id=>({id,kind:'Process · traced by hand',title:groups[id].title,sub:groups[id].sub,tech:Object.keys(nodes).filter(n=>nodes[n].stage===id).join(' · ')})),
+ edges:[{from:'detect',to:'triage',label:'open alert'},{from:'triage',to:'decide',label:'escalated investigation'}]});
 const tracedControl=sys.controls[model.control];
 const base='https://github.com/Cassandra-Labs-Foundation/cassandra-platform/blob/'+snapshot.revision+'/';
 const bsa='core/supabase/functions/api/bsa.ts',transfers='core/supabase/functions/api/transfers.ts',policy='compliance/policies/bsa/bsa.md';
@@ -31,7 +33,7 @@ function tracedSlices(eng){
  return diagram({label:'Manually traced slices',rows:[[{nodes:[
   {id:'routing',kind:'index.ts → auth.ts',title:'Request routing & access',sub:'Resolve route, authenticate, dispatch',open:{'data-open-view':'routing'},tone:'traced',tech:at(api+'index.ts',514)},
   {id:'rails',kind:'transfers.ts · ach.ts · wires.ts · cards.ts',title:'Payment execution & controls',sub:'Shared runGate calls and ledger handoff',open:{'data-open-view':'rails'},tone:'traced',tech:at(transfers,85)},
-  {id:'control',kind:'bsa.ts',title:'BSA alert & case management',sub:'Open alerts, investigate and record SAR decisions',open:{'data-open-view':'control'},tone:'traced',tech:'BSA-06'}]}]],
+  {id:'control',kind:'bsa.ts',title:'BSA alert & case management',sub:'Open alerts, investigate and record SAR decisions',href:'#/control/'+encodeURIComponent(model.control),tone:'traced',tech:'BSA-06'}]}]],
   edges:[{from:'routing',to:'rails',label:'dispatches payment handlers'},{from:'rails',to:'control',label:'runGate calls raiseAlert'}]},eng);
 }
 function routingDiagram(eng){
@@ -57,11 +59,6 @@ function railsDiagram(eng){
   [{nodes:[{id:'blnk',kind:'External ledger',title:'Blnk ledger',sub:'through the shared client',href:'#/container/blnk',tone:'external'}]}],
  ],edges:[...['book','ach','wire','card'].map(id=>({from:id,to:'gate',label:'calls'})),{from:'cda',to:'cdagate',label:'calls'},{from:'gate',to:'detect',label:'large movement'},{from:'gate',to:'other'},{from:'gate',to:'record',label:'passes · book transfer'},{from:'record',to:'blnk',label:'posts the movement'}]},eng);
 }
-function tracedDiagram(eng){
- const g=id=>({id,kind:'Process inside BSA-06',title:groups[id].title,sub:groups[id].sub,open:{'data-open-group':id},tone:'traced',tech:Object.keys(nodes).filter(n=>nodes[n].stage===id).join(' · ')});
- return diagram({label:'BSA-06 traced path',rows:[[{nodes:[{id:'in',tone:'port',title:'Movement reaching the payment gate'}]}],{frame:'BSA-06 · traced implementation path',rows:['detect','triage','decide'].map(id=>[{nodes:[g(id)]}])},[{nodes:[{id:'out',tone:'port',title:'Recorded SAR / no-SAR decision'}]}]],
-  edges:[{from:'in',to:'detect'},{from:'detect',to:'triage',label:'open alert'},{from:'triage',to:'decide',label:'escalated investigation'},{from:'decide',to:'out'}]},eng);
-}
 const block=(id,current)=>{const n=nodes[id];return {id,kind:n.kind,title:n.title,sub:n.sub,tech:n.tech,open:{'data-open-node':id},tone:[['Rule','Human decision'].includes(n.kind)?'decision':'',n.kind==='Exit'?'exit':'',id===current?'current':''].filter(Boolean).join(' ')};};
 // `out` names the nodes that produce the process's declared output; the rest are terminal.
 const shapes={
@@ -77,7 +74,7 @@ function nodeDiagram(id,eng){const n=nodes[id],steps=internals[id];
  return diagram({label:n.title,rows:[[{nodes:[{id:'parent',tone:'port',title:'Inside '+groups[n.stage].title,sub:'the enclosing process'}]}],{frame:n.tech,rows:steps.map(([name,detail],i)=>[{nodes:[{id:'i'+i,kind:'Implementation',title:name,sub:detail,tone:i===steps.length-1?'current':''}]}])},[{nodes:[{id:'src',kind:'Source',title:at(n.file,n.line),sub:'the code behind this boundary',tech:n.contract,...ext(n.file,n.line)}]}]],
   edges:[{from:'parent',to:'i0'},...steps.slice(1).map((_,i)=>({from:'i'+i,to:'i'+(i+1),label:'then'})),{from:'i'+(steps.length-1),to:'src',label:'implemented at',style:'dotted'}]},eng);
 }
-function renderViewInspector(view){const contract=state.engineering?`<div class="technical"><div class="eyebrow">Implementation contract</div><p>${view.sources.map(([f,l,t])=>`<b>${esc(t)}</b> <code>${esc(f)}:${l}</code>`).join('<br>')}</p></div>`:'';return `<div class="eyebrow">${view.scope}</div><h3>${view.intro}</h3><div class="section"><div class="eyebrow">Implementation</div><p>${view.meaning}</p></div><div class="check"><div class="eyebrow">Scope & review boundary</div><p>${view.limit}</p></div>${contract}<div class="sources">${view.sources.map(([file,line,title])=>link(file,line,title)).join('')}</div>`;}
+function renderViewInspector(view){const contract=state.engineering?`<div class="technical"><div class="eyebrow">Implementation contract</div><p>${view.sources.map(([f,l,t])=>`<b>${esc(t)}</b> <code>${esc(f)}:${l}</code>`).join('<br>')}</p></div>`:'';return `<h3>${view.intro}</h3><div class="section"><div class="eyebrow">Implementation</div><p>${view.meaning}</p></div><div class="check"><div class="eyebrow">Scope & review boundary</div><p>${view.limit}</p></div>${contract}<div class="sources">${view.sources.map(([file,line,title])=>link(file,line,title)).join('')}</div>`;}
 let state={view:'overview',group:null,node:null,id:null,engineering:false};
 function link(path,line,label){return `<a href="${base+path}#L${line}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`;}
 function crumb(view,title,current=false){return current?`<span aria-current="page">${title}</span>`:`<button data-up="${view}">${title}</button>`;}
@@ -90,8 +87,7 @@ function renderGenerated(r){
  root.querySelector('[data-title]').textContent=inv.title(r);
  root.querySelector('[data-scope]').textContent=inv.scope(r);
  root.querySelector('[data-breadcrumb]').innerHTML=crumbs.map(([href,title],i)=>hrefCrumb(href,title,i===crumbs.length-1)).join('<span class="crumbsep" aria-hidden="true">›</span>');
- root.querySelector('[data-maplabel]').textContent=`Inside ${inv.title(r)}`;
- root.querySelector('.maphint').textContent=inv.leaf(r)?'Implementation boundary reached':'Open a box to see what is inside';
+ root.querySelector('.maphead').hidden=!inv.leaf(r);
  paint(inv.flow(r,state.engineering));
  root.querySelector('[data-inspector]').innerHTML=inv.inspector(r,state.engineering);
 }
@@ -99,6 +95,7 @@ function render(){
 root.querySelector('[data-engineering]').checked=state.engineering;
 const generated=inv.resolve(state);
 if(generated)return renderGenerated(generated);
+if(state.view==='control'){location.replace('#/control/'+encodeURIComponent(model.control));return;}
 if(state.id||state.view==='policy')state={...state,view:'overview',id:null};
 const eng=state.engineering;
 const isDeep=state.view==='group'||state.view==='node';
@@ -108,10 +105,9 @@ root.querySelector('[data-title]').textContent=title;
 root.querySelector('[data-scope]').textContent=views[state.view]?.scope || (state.view==='control'?'BSA-06 → connected processes · one traced path':state.view==='group'?'Process → decisions and actions':'Decision or action → implementation mechanics');
 let crumbs=[crumb('overview','Architecture',state.view==='overview')];
 if(views[state.view]&&state.view!=='overview') { if(['routing','rails'].includes(state.view)) crumbs.push(crumb('api','Core API')); crumbs.push(crumb(state.view,title,true)); }
-if(!views[state.view]) { crumbs.push(hrefCrumb('#/policy','Policies & controls'),hrefCrumb('#/policy/'+tracedControl.policy,sys.policies[tracedControl.policy].title),hrefCrumb('#/control/'+model.control,tracedControl.id),crumb('control','Traced path',state.view==='control')); if(isDeep)crumbs.push(crumb('group',groups[state.group].title,state.view==='group')); if(current)crumbs.push(crumb('node',current.title,true)); }
+if(!views[state.view]) { crumbs.push(hrefCrumb('#/policy','Policies & controls'),hrefCrumb('#/policy/'+tracedControl.policy,sys.policies[tracedControl.policy].title),hrefCrumb('#/control/'+model.control,tracedControl.id)); if(isDeep)crumbs.push(crumb('group',groups[state.group].title,state.view==='group')); if(current)crumbs.push(crumb('node',current.title,true)); }
 root.querySelector('[data-breadcrumb]').innerHTML=crumbs.join('<span class="crumbsep" aria-hidden="true">›</span>');
-root.querySelector('[data-maplabel]').textContent=`Inside ${state.view==='control'?'BSA-06':title}`;
-root.querySelector('.maphint').textContent=current?'Implementation boundary reached': 'Open a box to see what is inside';
+root.querySelector('.maphead').hidden=!current;
 const flow={overview:()=>overviewFlow(sys,eng),api:()=>apiFlow(sys,tracedSlices(eng),eng),routing:()=>routingDiagram(eng),rails:()=>railsDiagram(eng),pipeline:()=>pipelineFlow(sys,eng),control:()=>tracedDiagram(eng),group:()=>groupDiagram(state.group,groups[state.group].selected,eng),node:()=>nodeDiagram(state.node,eng)}[state.view]();
 paint(flow+(current?`<div class="leafsource">${link(current.file,current.line,'Read the source behind this boundary')}</div>`:''));
 const n=current||(state.view==='group'?nodes[groups[state.group].selected]:null);

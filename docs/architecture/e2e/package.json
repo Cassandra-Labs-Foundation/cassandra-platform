@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test explorer.e2e.mjs"
+    "test": "node --test explorer.e2e.mjs",
+    "shots": "node shots.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

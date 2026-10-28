@@ -21,13 +21,14 @@ const chips=list=>list.length?`<div class="chips">${list.map(x=>`<code>${esc(x)}
 const verdict=v=>esc(String(v).replace(/_/g,' '));
 const enc=encodeURIComponent;
 const opHref=key=>'#/op/'+enc(key);
+let capped=false;
 const index=(label,body)=>`<div class="dindex" data-index><div class="boundarylabel">${esc(label)}</div>${body}</div>`;
 const take=(list,n)=>[list.slice(0,n),Math.max(0,list.length-n)];
 const more=(key,rest,what)=>rest>0?[{id:'more:'+key,tone:'more',title:`+ ${rest} more`,sub:`${what} · listed below`,scroll:true}]:[];
 const views=new Set(['domain','module','op','policy','control','container','file','table','machine','page','event','step']);
 const fnDirs=new Set(['aggregator','blnk-webhook','blnk-reconcile','drill','_shared','analytics']);
 
-export function inventory(sys){
+export function inventory(sys,traced={}){
  const {containers,domains,modules,operations,policies,controls,machines,pages,files,tables,events,steps,blnk,workflows,links,counts}=sys;
  const domainOf=Object.fromEntries(domains.flatMap(d=>d.modules.map(m=>[m,d])));
  const box=Object.fromEntries(containers.map(c=>[c.id,c]));
@@ -159,7 +160,7 @@ export function inventory(sys){
    ],edges);
   }
   if(r.kind==='module'){const x=r.item,m=r.id,me='m:'+m;
-   const [ops,opRest]=take(x.ops,8),[imp,impRest]=take(x.importedBy,6),[deps,depRest]=take(x.imports,8),[tabs,tabRest]=take(x.tables,8),[evs,evRest]=take(x.events,8),[ctl,ctlRest]=take(x.controls,8);
+   const [ops,opRest]=take(x.ops,8),[imp,impRest]=take(x.importedBy,6),[deps,depRest]=take(x.imports,4),[tabs,tabRest]=take(x.tables,4),[evs,evRest]=take(x.events,4),[ctl,ctlRest]=take(x.controls,4);
    const gateCtl=[...new Set(x.gate.flatMap(g=>g.claims.map(([u])=>u).filter(Boolean)))].filter(u=>!ctl.includes(u));
    const edges=[];
    ops.forEach(k=>{edges.push({from:'router',to:'o:'+k,label:'dispatches'});edges.push({from:'o:'+k,to:me,label:'handled by',tech:operations[k].handler});});
@@ -167,16 +168,18 @@ export function inventory(sys){
    imp.forEach(i=>edges.push({from:'m:'+i,to:me,label:'imports'}));
    deps.forEach(i=>edges.push({from:me,to:'m:'+i,label:'calls'}));
    x.crossImports.forEach(f=>edges.push({from:me,to:'x:'+f,label:'imports'}));
-   x.gate.forEach(g=>{edges.push({from:me,to:'cg:'+g.id,label:'implements'});g.claims.forEach(([u,v])=>u&&edges.push({from:'cg:'+g.id,to:'c:'+u,label:verdict(v),style:'dotted'}));});
+   x.gate.forEach(g=>{g.claims.forEach(([u,v])=>u&&edges.push({from:'cg:'+g.id,to:'c:'+u,label:verdict(v),style:'dotted'}));});
    tabs.forEach(t=>edges.push({from:me,to:'t:'+t,label:'reads/writes'}));
    evs.forEach(e=>{edges.push({from:me,to:'e:'+e,label:'emits'});(events[e]?.triggerOf||[]).forEach(u=>edges.push({from:'e:'+e,to:'c:'+u,label:'triggers'}));(events[e]?.producedBy||[]).forEach(u=>edges.push({from:'e:'+e,to:'c:'+u,label:'evidence for',style:'dashed'}));});
    return D(`Inside ${m}.ts`,[
     [G('Callers',[...(x.ops.length?[N.port('router','index.ts router',plural(x.ops.length,'route'),{href:m==='index'?'':'#/module/index'})]:[]),...imp.map(i=>N.module(i)),...more('imp',impRest,'importers')])],
     [G('Operations it handles',[...ops.map(N.op),...more('ops',opRest,'operations')])],
-    [P([N.module(m,{tone:'current',href:'',sub:first(x.about)||`${plural(x.exports.length,'exported function')} · ${x.lines} lines`,tech:x.exports.join(', ')})])],
+    // The module's gate checks are part of it, so they are drawn inside its box.
+    x.gate.length?{frame:`${m}.ts · this module · ${plural(x.exports.length,'exported function')} · gate checks it implements`,id:me,
+      rows:[[P(x.gate.map(g=>({id:'cg:'+g.id,kind:'Gate control · crosswalk claim',title:g.id,sub:first(g.behaviour),tone:'decision',tech:'crosswalk.json'})))]]}
+     :[P([N.module(m,{tone:'current',href:'',sub:first(x.about)||`${plural(x.exports.length,'exported function')} · ${x.lines} lines`,tech:x.exports.join(', ')})])],
     [G('Calls into',[...deps.map(i=>N.module(i)),...x.crossImports.map(f=>({id:'x:'+f,kind:'Other function',title:f,sub:box[f.split('/')[0]]?.title||'',href:files[f]?'#/file/'+enc(f):(box[f.split('/')[0]]?.href||''),tech:f})),...more('deps',depRest,'modules')]),G('Tables it references',[...tabs.map(t=>N.table(t)),...more('tabs',tabRest,'tables')])],
-    [G('Event codes it emits',[...evs.map(e=>N.event(e)),...more('evs',evRest,'event codes')]),G('Gate checks · crosswalk claims',x.gate.map(g=>({id:'cg:'+g.id,kind:'Gate control',title:g.id,sub:first(g.behaviour),tone:'decision',tech:'crosswalk.json'})))],
-    [G('Controls its events and gates serve',[...ctl.map(u=>N.control(u)),...gateCtl.map(u=>N.control(u)),...more('ctl',ctlRest,'controls')])],
+    [G('Event codes it emits',[...evs.map(e=>N.event(e)),...more('evs',evRest,'event codes')]),G('Controls its events and gates serve',[...ctl.map(u=>N.control(u)),...gateCtl.map(u=>N.control(u)),...more('ctl',ctlRest,'controls')])],
    ],edges);
   }
   if(r.kind==='op'){const o=r.item,x=modules[o.module];
@@ -210,14 +213,14 @@ export function inventory(sys){
    const edges=[...c.triggers.flatMap(([code,ms])=>[...ms.map(m=>({from:'m:'+m,to:'e:'+code,label:'emits'})),{from:'e:'+code,to:me,label:'triggers'}]),
     ...c.gate.map(([g,m,v])=>({from:'cg:'+g,to:me,label:verdict(v),style:'dotted'})),...c.gate.map(([g,m])=>({from:'m:'+m,to:'cg:'+g,label:'implements'})),
     ...c.produced.map(([code])=>({from:me,to:'e:'+code,label:'produces'})),
-    {from:me,to:'herm',label:'tested by',style:'dashed'},{from:me,to:'live',label:'tested by',style:'dashed'},...(c.traced?[{from:me,to:'traced',label:'traced by hand',style:'dotted'}]:[])];
+    {from:me,to:'herm',label:'tested by',style:'dashed'},{from:me,to:'live',label:'tested by',style:'dashed'},...(c.traced&&traced.processes?traced.edges:[])];
    const gateMods=[...new Set(c.gate.map(([,m])=>m))].filter(m=>!trigMods.includes(m));
    return D(`${c.id} flow`,[
     [G('Modules that emit its triggers',[...trigMods,...gateMods].map(m=>N.module(m)))],
     [G('Triggering events',c.triggers.map(([code])=>N.event(code))),G('Gate checks claimed · crosswalk',c.gate.map(([g,m])=>({id:'cg:'+g,kind:`Gate control in ${m}.ts`,title:g,tone:'decision',tech:'crosswalk.json'})))],
-    [P([{id:me,kind:`Control · ${c.id} · ${c.scope==='in'?'In scope':'Scoped out'}`,title:c.title,sub:first(c.behavior),tone:'current decision',tech:r.id}])],
+    c.traced&&traced.processes?{frame:`${c.id} · ${c.title} · inside, traced by hand`,id:me,rows:traced.processes.map(x=>[P([{...x,href:'#/process/'+x.id,tone:'traced'}])])}
+     :[P([{id:me,kind:`Control · ${c.id} · ${c.scope==='in'?'In scope':'Scoped out'}`,title:c.title,sub:first(c.behavior),tone:'current decision',tech:r.id}])],
     [G('Produced events',c.produced.map(([code])=>N.event(code))),G('Evidence',[{id:'herm',kind:'Hermetic tier · fake database',title:`Hermetic: ${c.hermetic||'not run'}`,sub:c.blockedOn?'blocked on '+JSON.stringify(c.blockedOn):'',href:'#/container/drill',tech:'control-tests.json'},{id:'live',kind:'Live tier · the real core',title:`Live: ${c.live||'not run'}`,sub:c.reachability?'reachability '+c.reachability:'',tech:'control-tests-live.json'}])],
-    [P(c.traced?[{id:'traced',kind:'Manually traced',title:'Open the traced implementation path',sub:'Payment gate → alert triage → SAR decision, read from source',href:'#/control',tone:'traced'}]:[])],
    ],edges);
   }
   if(r.kind==='event'){const e=r.item,me='e:'+r.id;
@@ -363,9 +366,18 @@ export function inventory(sys){
  // ---- complete listings that follow a capped diagram -------------------------------
  function indexFor(r,eng){
   if(r.kind==='policies')return index(`Every policy · ${counts.policies}`,grid(Object.keys(policies).map(id=>{const p=policyRow(id);return card('#/policy/'+id,'Policy',policies[id].title,`${plural(p.cs.length,'control')} · ${p.inScope.length} in scope · ${p.green} green in both tiers`,'Open policy ↘');})));
+  // A module's and a control's listings repeat their diagram, so they follow it only when it had to cap a list.
+  if((r.kind==='module'||r.kind==='control')&&!capped)return '';
   if(r.kind==='module'){const x=r.item;
-   const byAudience=['partner','internal','public'].map(a=>[a,x.ops.filter(k=>operations[k].audience===a)]).filter(([,l])=>l.length);
-   return index('Everything in this module',`${byAudience.map(([a,l])=>section(`${a} operations · ${l.length}`,grid(l.map(opCard)))).join('')}${x.gate.length?section(`Gate controls implemented here · ${x.gate.length} · reviewed crosswalk claims`,x.gate.map(g=>`<div class="mechanic"><span class="kind">${esc(g.id)}</span><span class="sub">${esc(g.behaviour)}</span><span class="sub">${g.claims.map(([u,v])=>u?`<a href="#/control/${esc(u)}">${esc(controls[u].id)}</a> ${verdict(v)}`:verdict(v)).join(' · ')}</span></div>`).join('')):''}${section(`Controls whose events this module emits · ${x.controls.length}`,x.controls.length?grid(x.controls.map(ctlCard)):'<p class="muted">None.</p>')}${section(`Event codes emitted · ${x.events.length}`,evChips(x.events))}${section(`Tables referenced · ${x.tables.length}`,x.tables.length?x.tables.map(k=>`<a class="pill" href="#/table/${esc(enc(k))}">${esc(k)}</a>`).join(' '):'<p class="muted">None found by static reference.</p>')}${section('Calls into',x.imports.length?x.imports.map(modLink).join(' '):'<p class="muted">No other api/ module.</p>')}${section('Called by',x.importedBy.length?x.importedBy.map(modLink).join(' '):'<p class="muted">No other api/ module.</p>')}`);}
+   // Only the lists the diagram cut short; everything else is already drawn.
+   const byAudience=x.ops.length>8?['partner','internal','public'].map(a=>[a,x.ops.filter(k=>operations[k].audience===a)]).filter(([,l])=>l.length):[];
+   const parts=[...byAudience.map(([a,l])=>section(`${a} operations · ${l.length}`,grid(l.map(opCard)))),
+    x.controls.length>4?section(`Controls whose events this module emits · ${x.controls.length}`,grid(x.controls.map(ctlCard))):'',
+    x.events.length>4?section(`Event codes emitted · ${x.events.length}`,evChips(x.events)):'',
+    x.tables.length>4?section(`Tables referenced · ${x.tables.length}`,x.tables.map(k=>`<a class="pill" href="#/table/${esc(enc(k))}">${esc(k)}</a>`).join(' ')):'',
+    x.imports.length>4?section(`Calls into · ${x.imports.length}`,x.imports.map(modLink).join(' ')):'',
+    x.importedBy.length>6?section(`Called by · ${x.importedBy.length}`,x.importedBy.map(modLink).join(' ')):''].join('');
+   return parts?index('The rest of each list the diagram shortened',parts):'';}
   if(r.kind==='op')return `<div class="leafsource">${src('core/core-api.yaml',r.item.specLine,'Read the operation in the spec')}${src(modules[r.item.module].file,r.item.handlerLine,'Read the handler')}</div>`;
   if(r.kind==='control'){const c=r.item;const rows=list=>list.map(([code,ms])=>`<div class="eventrow">${evLink(code)}<span>${ms.length?'emitted by '+ms.map(modLink).join(' '):'<span class="muted">no routed emitter</span>'}</span></div>`).join('');
    return index('Events and emitters',`${section('Triggering events',c.triggers.length?rows(c.triggers):'<p class="muted">None declared: exercised on a schedule or by review.</p>')}${section('Produced events',c.produced.length?rows(c.produced):'<p class="muted">None declared: its evidence lives in the records it writes.</p>')}${section('Modules that emit its events',c.modules.length?c.modules.map(modLink).join(' '):'<p class="muted">No api/ module emits this control\'s events.</p>')}`);}
@@ -381,15 +393,15 @@ export function inventory(sys){
   if(r.kind==='container'&&r.item.file)return `<div class="leafsource">${src(r.item.file,0,r.id==='analytics'?'Read the analytics README':'Read the entrypoint')}</div>`;
   return '';
  }
- const flow=(r,eng=false)=>diagramFor(r,eng)+indexFor(r,eng);
+ const flow=(r,eng=false)=>{const d=diagramFor(r,eng);capped=d.includes('t-more');return d+indexFor(r,eng);};
 
  function inspector(r,eng=false){
   const box2=(eyebrow,body,cls='section')=>`<div class="${cls}"><div class="eyebrow">${eyebrow}</div>${body}</div>`;
-  const gen=box2('How this view is made','<p>Generated from the spec, the control catalogue, test results and source by <code>scripts/gen_architecture.py</code>. Each arrow is a static reference (an import, a table name, a route, an emit site, a catalogue trigger), not observed traffic. Dashed arrows are evidence or tests; dotted arrows are reviewed claims or declared order.</p>','check');
+  const gen='';void box2('How this view is made','<p>Generated from the spec, the control catalogue, test results and source by <code>scripts/gen_architecture.py</code>. Each arrow is a static reference (an import, a table name, a route, an emit site, a catalogue trigger), not observed traffic. Dashed arrows are evidence or tests; dotted arrows are reviewed claims or declared order.</p>','check');
   const contract=pairs=>eng?box2('Implementation contract',`<p>${pairs.filter(([,v])=>v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`<b>${esc(k)}</b> <code>${esc(Array.isArray(v)?v.join(', '):v)}</code>`).join('<br>')}</p>`,'technical'):'';
   if(r.kind==='policies')return `<div class="eyebrow">Compliance catalogue</div><h3>Every policy and control the institution has written</h3>${box2('Status columns','<p><b>Hermetic</b> runs each control against a fake database; <b>Live</b> runs it against the real core. Scoped-out controls are discharged by people and paperwork and are not claimed.</p>')}${contract([['catalogue','controls.json'],['scope','control-scope.json'],['hermetic results','control-tests.json'],['live results','control-tests-live.json']])}${gen}`;
   if(r.kind==='domain')return `<div class="eyebrow">Domain</div><h3>${esc(r.item.about)}</h3>${box2('Boundary','<p>Every module here ships inside the one <code>api</code> edge function. The grouping is for reading.</p>')}${contract([['modules',r.item.modules.map(m=>m+'.ts')],['grouping','DOMAINS in scripts/gen_architecture.py']])}${gen}`;
-  if(r.kind==='module'){const x=r.item;return `<div class="eyebrow">Module purpose · from its source header</div><h3>${esc(first(x.about)||`${x.file.split('/').pop()} has no header comment; its exports are below`)}</h3>${x.about?box2('Header',`<p>${esc(x.about)}</p>`):''}${box2('Exported functions',chips(x.exports))}${box2('Live flows that call its paths',chips(x.flows.map(f=>f+'.test.ts')))}${contract([['file',x.file],['lines',x.lines],['imports',x.imports.map(i=>i+'.ts')],['cross-function imports',x.crossImports],['tables',x.tables]])}${gen}<div class="sources">${src(x.file,1,`Read ${x.file.split('/').pop()} · ${x.lines} lines`)}</div>`;}
+  if(r.kind==='module'){const x=r.item;return `<div class="eyebrow">Module purpose · from its source header</div><h3>${esc(first(x.about)||`${x.file.split('/').pop()} has no header comment; its exported functions follow`)}</h3>${x.about?box2('Header',`<p>${esc(x.about)}</p>`):''}${box2('Exported functions',chips(x.exports))}${box2('Live flows that call its paths',chips(x.flows.map(f=>f+'.test.ts')))}${contract([['file',x.file],['lines',x.lines],['imports',x.imports.map(i=>i+'.ts')],['cross-function imports',x.crossImports],['tables',x.tables]])}${gen}<div class="sources">${src(x.file,1,`Read ${x.file.split('/').pop()} · ${x.lines} lines`)}</div>`;}
   if(r.kind==='op'){const o=r.item;return `<div class="eyebrow">Operation</div><h3>${esc(o.summary||o.handler)}</h3>${box2('Contract',`<p>Handler <code>${esc(o.handler)}</code>. Audience ${esc(o.audience)}, tier ${esc(o.tier)}${o.actors.length?', actors '+o.actors.map(esc).join(', '):''}. ${o.ui?'Readable by the staff console.':''}</p>`)}${box2('Evidence',`<p>${o.flows.length?'Referenced by live flows: '+o.flows.map(f=>esc(f)+'.test.ts').join(', ')+'.':'No live flow references this path.'} A reference is not a test run.</p>`,'check')}${contract([['operationId',o.operationId],['x-handler',o.handler],['x-route',o.route],['x-audience',o.audience],['x-tier',o.tier],['x-actors',o.actors],['x-ui-surface',String(o.ui)],['spec',`core/core-api.yaml:${o.specLine}`],['handler',`${modules[o.module].file}:${o.handlerLine}`]])}<div class="sources">${src('core/core-api.yaml',o.specLine,'Spec')}${src(modules[o.module].file,o.handlerLine,'Handler')}</div>`;}
   if(r.kind==='policy'){const p=policyRow(r.id);return `<div class="eyebrow">Policy</div><h3>${esc(r.item.title)}</h3>${box2('Coverage',`<p>${plural(p.cs.length,'control')}; ${p.inScope.length} in scope, ${p.green} green in both the hermetic and live tiers.</p>`)}${contract([['file',r.item.file],['controls',r.item.controls]])}${gen}<div class="sources">${src(r.item.file,1,'Read the policy')}</div>`;}
   if(r.kind==='control'){const c=r.item;return `<div class="eyebrow">Control · ${esc(c.id)}</div><h3>${esc(c.title)}</h3>${box2('System behaviour · from the policy',`<p>${esc(c.behavior)}</p>`)}${box2('Evidence',`<p>${c.scope==='in'?'In scope':'Scoped out'} · ${esc(c.scopeWhy)}</p><p>Hermetic ${status(c.hermetic)} · Live ${status(c.live)} · reachability ${esc(c.reachability||'not computed')}${c.blockedOn?' · blocked on '+esc(JSON.stringify(c.blockedOn)):''}</p>`,'check')}${c.citations.length?box2('Regulatory citations',chips(c.citations)):''}${contract([['uid',r.id],['policy line',`${policies[c.policy].file}:${c.policyLine}`],['trigger_event',c.triggers.map(([e])=>e)],['produced_events',c.produced.map(([e])=>e)],['gate controls',c.gate.map(([g])=>g)]])}<div class="sources">${src(policies[c.policy].file,c.policyLine,`Policy ${c.id}`)}</div>`;}
@@ -428,7 +440,7 @@ export function overviewFlow(sys,eng=false){
   {from:'k:blnk',to:'k:blnk-webhook',label:'ledger webhooks · per its header',style:'dashed'},
   {from:'k:policy',to:'k:pipeline',label:'extracted into the catalogue',style:'dotted'},{from:'k:pipeline',to:'k:api',label:'generates routes.gen.ts',style:'dotted'},{from:'k:pipeline',to:'k:ui',label:'generates the proxy allowlist',style:'dotted'},
   {from:'ci',to:'k:analytics',label:'schedules the reporters',style:'dashed'},{from:'ci',to:'k:drill',label:'runs the live tier',style:'dashed'},
- ]},eng)+`<p class="context-note">Open any box to see what is inside it. Solid arrows are static references found in source (imports, table names, the spec's UI surface); dashed arrows are runtime callbacks or schedules a header or workflow states; dotted arrows are design-time derivations.</p>`;
+ ]},eng);
 }
 // Core API: a component diagram, from audiences to the router, authentication,
 // domains, the shared platform modules they import, and what they store.
