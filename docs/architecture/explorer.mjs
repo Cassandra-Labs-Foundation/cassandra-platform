@@ -1,5 +1,5 @@
 import {decodeRoute} from './navigation.mjs';
-import {inventory,overviewFlow,apiFlow} from './inventory.mjs';
+import {inventory,overviewFlow,apiFlow,pipelineFlow} from './inventory.mjs';
 const root=document.getElementById('control-atlas');
 let model,sys;
 try{
@@ -64,7 +64,7 @@ root.querySelector('[data-breadcrumb]').innerHTML=crumbs.join('<span class="crum
 root.querySelector('[data-maplabel]').textContent=`Inside ${state.view==='control'?'BSA-06':title}`;
 root.querySelector('.maphint').textContent=current?'Implementation boundary reached': 'Open a block to see what is inside';
 let flow='';
-if(views[state.view])flow=state.view==='overview'?overviewFlow(sys):state.view==='api'?apiFlow(sys,views.api.items.map(([target,title,kind,sub,action])=>`<button class="node container-node" data-open-view="${target}"><span class="kind">${kind}</span><strong>${title}</strong><span class="sub">${sub}</span><span class="inside">${action} ↘</span></button>`).join('<div class="sibling-gap"></div>')):renderView(views[state.view]);
+if(views[state.view])flow=state.view==='overview'?overviewFlow(sys):state.view==='api'?apiFlow(sys,views.api.items.map(([target,title,kind,sub,action])=>`<button class="node container-node" data-open-view="${target}"><span class="kind">${kind}</span><strong>${title}</strong><span class="sub">${sub}</span><span class="inside">${action} ↘</span></button>`).join('<div class="sibling-gap"></div>')):state.view==='pipeline'?pipelineFlow(sys)+renderView(views.pipeline):renderView(views[state.view]);
 if(state.view==='control')flow=`<div class="port">Movement reaching the payment gate</div>${line()}<div class="enclosure"><div class="boundarylabel">BSA-06 · TRACED IMPLEMENTATION PATH</div>${groupBlock('detect')}${line('Open alert')}${groupBlock('triage')}${line('Escalated investigation')}${groupBlock('decide')}</div>${line()}<div class="port">Recorded SAR / no-SAR decision</div>`;
 if(state.view==='group'){
 if(state.group==='detect')flow=block('velocity')+'<div class="branches detection"><div class="branch"><span class="branchlabel">No · over the cap</span>'+block('blocked')+'</div><div class="branch"><span class="branchlabel">Yes · continue</span>'+block('threshold')+branches('Yes · above $10,000','alert','No · at or below','skip')+'</div></div>';

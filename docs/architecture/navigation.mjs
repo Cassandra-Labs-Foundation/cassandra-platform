@@ -2,8 +2,8 @@ const topViews=new Set(['overview','api','routing','rails','pipeline','policy','
 const groups=new Set(['detect','triage','decide']);
 const nodeParents={velocity:'detect',threshold:'detect',blocked:'detect',alert:'detect',skip:'detect',access:'triage',triage:'triage',resolve:'triage',case:'triage',officer:'decide',decision:'decide',file:'decide',nofile:'decide'};
 // Generated views take one id; whether it exists is checked against system.json by the explorer.
-const generated=new Set(['domain','module','op','policy','control','container']);
-const safeId=/^[\w .:/{}@-]{1,200}$/;
+const generated=new Set(['domain','module','op','policy','control','container','file','table','machine','page','event','step']);
+const safeId=/^[\w .:/{}[\]@-]{1,200}$/;
 export function decodeRoute(hash){
   const raw=hash.replace(/^#\/?/,'');
   const cut=raw.indexOf('/');

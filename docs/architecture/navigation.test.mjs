@@ -11,7 +11,7 @@ test('process permalinks restore their boundary rather than a previous node',()=
  for(const id of Object.keys(model.groups))assert.deepEqual(decodeRoute('#/process/'+id),{view:'group',group:id,node:null,id:null});
 });
 test('every generated item has a permalink that decodes back to it',()=>{
- const cases=[['domain',system.domains.map(d=>d.id)],['module',Object.keys(system.modules)],['op',Object.keys(system.operations)],['policy',Object.keys(system.policies)],['control',Object.keys(system.controls)]];
+ const cases=[['domain',system.domains.map(d=>d.id)],['module',Object.keys(system.modules)],['op',Object.keys(system.operations)],['policy',Object.keys(system.policies)],['control',Object.keys(system.controls)],['container',system.containers.map(c=>c.id)],['file',Object.keys(system.files)],['table',Object.keys(system.tables)],['machine',Object.keys(system.machines)],['page',Object.keys(system.pages)],['event',Object.keys(system.events)],['step',system.steps.map(s=>s.script)]];
  for(const [view,ids] of cases)for(const id of ids)assert.deepEqual(decodeRoute(`#/${view}/${encodeURIComponent(id)}`),{view,group:null,node:null,id});
 });
 test('old architecture URLs remain navigable',()=>{

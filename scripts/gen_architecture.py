@@ -16,6 +16,10 @@ from artifacts that already go red when they lie:
                                 hermetic + live status and reachability
   core/verifier/flows/*.test.ts which live flows call each operation (static
                                 path match — a reference, not a test run)
+  functions/<fn>/*.ts           the other edge functions' files and exports
+  core/supabase/migrations/*.sql every table and its columns, replayed in order
+  ui/src/pages/**/*.jsx         every console page and the operations it names
+  scripts/rebuild_artifacts.sh  the pipeline's actual steps, in their order
 
 Because the inventory is derived, it is complete by construction; the one
 hand-authored input is DOMAINS (how modules group for a reader). A module
@@ -97,6 +101,11 @@ def flow_matchers(path):
     return re.compile(r"[\"'`]" + rx + r"(?=[\"'`?])")
 
 
+def exports_of(text):
+    return [[m.group(1), text.count("\n", 0, m.start()) + 1]
+            for m in re.finditer(r"^export\s+(?:async\s+)?(?:function|const|class)\s+(\w+)", text, re.MULTILINE)]
+
+
 def build():
     spec = spec_io.load_spec(ROOT / "core/core-api.yaml")
     spec_text = read("core/core-api.yaml")
@@ -143,12 +152,15 @@ def build():
             modules[module]["flows"] = sorted(set(modules[module]["flows"]) | set(hit))
 
     emitted = json.loads(read("crosswalk-emitted-events.json"))
-    emitters = {}
+    emitters, emit_sites = {}, {}
     for row in emitted["literal"] + emitted["templated"]:
         # "file:line", or a bare file when the code is emitted from many sites
         src, ln = re.match(r"(.+?)(?::(\d+))?$", row["source"]).groups()
-        if src.startswith(API):
-            for code in row.get("expands_to") or [row["code"]]:
+        for code in row.get("expands_to") or [row["code"]]:
+            site = [src, int(ln or 1)]
+            if site not in emit_sites.setdefault(code, []):
+                emit_sites[code].append(site)
+            if src.startswith(API):
                 emitters.setdefault(code, []).append([pathlib.Path(src).stem, int(ln or 1)])
     for code, sites in emitters.items():
         for m, _ in sites:
@@ -214,6 +226,84 @@ def build():
     for c in controls.values():
         c.setdefault("gate", [])
 
+    # --- the other edge functions: every file, its header, exports and imports
+    files, fn_texts = {}, {}
+    for fid, _, _entry in FUNCTIONS:
+        for p in sorted((ROOT / "core/supabase/functions" / fid).glob("*.ts")):
+            text = p.read_text(encoding="utf-8")
+            rel = f"{fid}/{p.name}"
+            fn_texts[rel] = text
+            files[rel] = {"fn": fid, "file": f"core/supabase/functions/{rel}", "lines": text.count("\n") + 1,
+                          "about": header(text), "exports": exports_of(text), "test": p.name.endswith(".test.ts"),
+                          "imports": sorted({i for i in re.findall(r'from\s+"\./([\w.]+)\.ts"', text) if i + ".ts" != p.name})}
+
+    # --- postgres: replay the migrations in order; creates define, alters add, drops remove
+    tables = {}
+    for p in sorted((ROOT / "core/supabase/migrations").glob("*.sql")):
+        text = p.read_text(encoding="utf-8")
+        rel = "core/supabase/migrations/" + p.name
+        for m in re.finditer(r'create table (?:if not exists )?"?(\w+)"?\."?(\w+)"?\s*\(', text, re.IGNORECASE):
+            end = text.find("\n);", m.end())
+            body = text[m.end():end] if end > -1 else ""
+            cols = [[c.group(1), c.group(2).strip().rstrip(",")]
+                    for c in re.finditer(r'^\s*"(\w+)"\s+([^\n]+)', body, re.MULTILINE)]
+            tables[f"{m.group(1)}.{m.group(2)}"] = {
+                "schema": m.group(1), "name": m.group(2), "migration": rel,
+                "line": text.count("\n", 0, m.start()) + 1, "columns": cols}
+        for m in re.finditer(r'alter table (?:if exists )?"?(\w+)"?\."?(\w+)"?\s+add column (?:if not exists )?"?(\w+)"?\s+([^,;\n]+)',
+                             text, re.IGNORECASE):
+            t = tables.get(f"{m.group(1)}.{m.group(2)}")
+            if t and m.group(3) not in [c[0] for c in t["columns"]]:
+                t["columns"].append([m.group(3), m.group(4).strip()])
+        for m in re.finditer(r'drop table (?:if exists )?"?(\w+)"?\."?(\w+)"?', text, re.IGNORECASE):
+            tables.pop(f"{m.group(1)}.{m.group(2)}", None)
+    for t in tables.values():
+        # static references only: supabase .from("name") and SQL "schema"."name"
+        pat = re.compile(r'from\(\s*["\']' + re.escape(t["name"]) + r'["\']'
+                         + r'|"' + re.escape(t["schema"]) + r'"\."' + re.escape(t["name"]) + '"')
+        t["modules"] = sorted(m for m, s in sources.items() if pat.search(s))
+        t["functionFiles"] = sorted(rel for rel, s in fn_texts.items() if pat.search(s))
+
+    # --- staff console: every page and the operations its source names
+    pages = {}
+    for p in sorted((ROOT / "ui/src/pages").rglob("*.jsx")):
+        if p.name.startswith("_"):
+            continue
+        rel = str(p.relative_to(ROOT / "ui/src/pages"))
+        text = p.read_text(encoding="utf-8")
+        named = sorted(k for k, o in ops.items()
+                       if f"{o['method']} {o['path']}" in text or flow_matchers(o["path"]).search(text))
+        pages[rel] = {"file": "ui/src/pages/" + rel, "lines": text.count("\n") + 1,
+                      "about": header(text), "ops": named}
+
+    # --- the pipeline's actual steps, read from the one ordered rebuild script
+    steps = []
+    for n, raw in enumerate(read("scripts/rebuild_artifacts.sh").splitlines(), 1):
+        m = re.match(r"(?:python3|deno run --allow-all)\s+(\S+)", raw.strip())
+        if not m:
+            continue
+        script = m.group(1)
+        stext = read(script)
+        if script.endswith(".py"):
+            d = re.search(r'"""(.+?)(?:\n|""")', stext, re.DOTALL)
+            about = d.group(1).strip() if d else ""
+        else:
+            about = header(stext)
+        steps.append({"script": script, "shLine": n, "about": about[:300],
+                      "note": raw.split("#", 1)[1].strip() if "#" in raw else ""})
+
+    # --- every event code: its emit sites and the controls it serves
+    events = {code: {"sites": s, "triggerOf": [], "producedBy": []} for code, s in emit_sites.items()}
+    for uid, c in controls.items():
+        for code, _ in c["triggers"]:
+            events.setdefault(code, {"sites": [], "triggerOf": [], "producedBy": []})["triggerOf"].append(uid)
+        for code, _ in c["produced"]:
+            events.setdefault(code, {"sites": [], "triggerOf": [], "producedBy": []})["producedBy"].append(uid)
+
+    # --- who talks to the external ledger (a static text reference, not a call proof)
+    blnk = {"modules": sorted(m for m, s in sources.items() if re.search("blnk", s, re.IGNORECASE)),
+            "files": sorted(rel for rel, s in fn_texts.items() if re.search("blnk", s, re.IGNORECASE))}
+
     domain_of = {m: d[0] for d in DOMAINS for m in d[3]}
     domains = [{"id": d, "title": t, "about": a, "modules": [m for m in ms if m in modules]} for d, t, a, ms in DOMAINS]
     stray = [m for m in modules if m not in domain_of]
@@ -222,9 +312,14 @@ def build():
     for m in modules.values():
         m["events"].sort()
 
-    machines = {name: states for name, states in spec["x-state-machines"].items()}
-    pages = sorted(str(p.relative_to(ROOT / "ui/src/pages")) for p in (ROOT / "ui/src/pages").rglob("*.jsx")
-                   if not p.name.startswith("_"))
+    sm_at = spec_text.find("x-state-machines:")
+    machines = {}
+    for name, states in spec["x-state-machines"].items():
+        idx = spec_text.find(f"\n  {name}:", sm_at)
+        machines[name] = {"states": states if isinstance(states, list) else list(states),
+                          "specLine": spec_text.count("\n", 0, idx) + 2 if idx > -1 else 1,
+                          "tables": sorted(k for k, t in tables.items()
+                                           if re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower() == t["name"])}
     containers = [
         {"id": "api", "title": "Core API", "kind": "Supabase edge function · Deno",
          "about": f"{len(ops)} operations across {len(modules)} modules", "href": "#/api"},
@@ -247,9 +342,11 @@ def build():
     return {
         "_comment": "GENERATED by scripts/gen_architecture.py from the spec, controls and source. Do not edit.",
         "counts": {"operations": len(ops), "modules": len(modules), "policies": len(policies), "controls": len(controls),
-                   "events": len(emitters), "flows": len(flows)},
+                   "events": len(emitters), "flows": len(flows), "tables": len(tables), "pages": len(pages),
+                   "machines": len(machines), "files": len(files), "steps": len(steps)},
         "containers": containers, "domains": domains, "modules": modules, "operations": ops,
         "policies": policies, "controls": controls, "machines": machines, "pages": pages,
+        "files": files, "tables": tables, "events": events, "steps": steps, "blnk": blnk,
     }
 
 

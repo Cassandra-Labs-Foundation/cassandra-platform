@@ -131,6 +131,54 @@ test('a reviewer drills BSA policy → BSA-06 → its traced path → one decisi
   assert.ok((await page.url()).endsWith('#/policy/bsa'));
 });
 
+test('every other edge function drills file by file, and every file is reachable', async () => {
+  for (const fn of ['aggregator', 'blnk-webhook', 'blnk-reconcile', 'drill']) {
+    await open('#/container/' + fn);
+    const want = readdirSync(join(ROOT, 'core/supabase/functions', fn)).filter(f => f.endsWith('.ts'));
+    const shown = await map().locator('a[href^="#/file/"]').evaluateAll(as => as.map(a => decodeURIComponent(a.getAttribute('href').slice('#/file/'.length))));
+    assert.deepEqual(want.filter(f => !shown.includes(fn + '/' + f)), [], `every ${fn} file is on the map`);
+  }
+  await map().locator(`a[href="#/file/${encodeURIComponent('drill/run.ts')}"]`).click();
+  assert.equal(await title(), 'drill/run.ts');
+  assert.match(await page.locator('[data-inspector]').innerText(), /Drill runner/i, 'file purpose comes from its source header');
+  await crumbs().getByRole('button', {name: 'Control drill'}).click();
+  assert.equal(await title(), 'Control drill');
+});
+
+test('Postgres drills to a table\'s columns and a state machine\'s states', async () => {
+  await open('#/container/postgres');
+  await map().locator(`a[href="#/table/${encodeURIComponent('core.account')}"]`).click();
+  assert.equal(await title(), 'core.account');
+  const cols = await map().innerText();
+  for (const col of ['blnk_ledger_id', 'lock_type', 'maturity_date']) assert.ok(cols.includes(col), `table leaf shows column ${col}`);
+  assert.match(await page.locator('.maphint').innerText(), /boundary reached/i);
+  await crumbs().getByRole('button', {name: 'Postgres'}).click();
+  await map().locator(`a[href="#/machine/${encodeURIComponent('Account')}"]`).click();
+  assert.match(await map().innerText(), /open[\s\S]*frozen[\s\S]*closed/, 'machine leaf lists its declared states');
+});
+
+test('the staff console drills page by page, and every page is reachable', async () => {
+  await open('#/container/ui');
+  const want = readdirSync(join(ROOT, 'ui/src/pages'), {recursive: true})
+    .map(String).filter(f => f.endsWith('.jsx') && !f.split('/').pop().startsWith('_')).map(f => f.replaceAll('\\', '/'));
+  const shown = await map().locator('a[href^="#/page/"]').evaluateAll(as => as.map(a => decodeURIComponent(a.getAttribute('href').slice('#/page/'.length))));
+  assert.deepEqual(want.filter(f => !shown.includes(f)), [], 'every ui/src/pages/*.jsx is on the map');
+  await map().locator(`a[href="#/page/${encodeURIComponent('compliance.jsx')}"]`).click();
+  await map().locator(`a[href="#/op/${encodeURIComponent('GET /governance/obligations')}"]`).waitFor();
+  await crumbs().getByRole('button', {name: 'Staff console'}).click();
+  assert.equal(await title(), 'Staff console');
+});
+
+test('a control\'s event drills to its emit site, and the pipeline to a concrete step', async () => {
+  await open('#/control/bsa:BSA-06');
+  await map().locator(`a[href="#/event/${encodeURIComponent('bsa_alert.created')}"]`).first().click();
+  assert.equal(await title(), 'bsa_alert.created');
+  assert.match(await map().innerText(), /bsa\.ts/, 'event leaf names its emit site');
+  await open('#/pipeline');
+  await map().locator(`a[href="#/step/${encodeURIComponent('scripts/gen_architecture.py')}"]`).click();
+  assert.match(await page.locator('[data-inspector]').innerText(), /rebuild_artifacts/, 'step leaf explains its place in the order');
+});
+
 test('old permalinks still land on the traced BSA-06 views', async () => {
   for (const [hash, want] of [['#/control', 'Transaction monitoring & case management'], ['#/walkthroughs', 'Transaction monitoring & case management'], ['#/process/triage', 'Alert triage & investigation'], ['#/components', 'Core API']]) {
     await open(hash);
