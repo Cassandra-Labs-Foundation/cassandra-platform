@@ -87,11 +87,11 @@ test('every API module and every operation is reachable from the Core API', asyn
 
 test('a reviewer drills Core API → Payments → transfers → POST /transfers and climbs back', async () => {
   await open('#/api');
-  await map().locator('a[href="#/domain/payments"]').click();
-  await map().locator('a[href="#/module/transfers"]').click();
+  await map().locator('a[href="#/domain/payments"]').first().click();
+  await map().locator('a[href="#/module/transfers"]').first().click();
   assert.equal(await title(), 'transfers.ts');
   assert.match(await page.locator('[data-inspector]').innerText(), /runGate|gate/i, 'module purpose comes from its source header');
-  await map().locator(`a[href="#/op/${encodeURIComponent('POST /transfers')}"]`).click();
+  await map().locator(`a[href="#/op/${encodeURIComponent('POST /transfers')}"]`).first().click();
   const leaf = await page.locator('[data-inspector]').innerText();
   for (const fact of ['transfers.', 'partner', 'write', 'transfers.test.ts']) assert.ok(leaf.includes(fact), `operation leaf shows ${fact}`);
   assert.match(await page.locator('.maphint').innerText(), /boundary reached/i);
@@ -105,7 +105,7 @@ test('a reviewer drills Core API → Payments → transfers → POST /transfers 
 test('every policy and every control is reachable from Policies & controls', async () => {
   await open('#/overview');
   await page.locator('.topnav').getByRole('link', {name: 'Policies & controls'}).click();
-  const policies = await map().locator('a[href^="#/policy/"]').evaluateAll(as => as.map(a => a.getAttribute('href')));
+  const policies = [...new Set(await map().locator('a[href^="#/policy/"]').evaluateAll(as => as.map(a => a.getAttribute('href'))))];
   assert.equal(policies.length, POLICIES);
   const controls = new Set();
   for (const href of policies) {
@@ -117,7 +117,7 @@ test('every policy and every control is reachable from Policies & controls', asy
 
 test('a reviewer drills BSA policy → BSA-06 → its traced path → one decision, and back', async () => {
   await open('#/policy/bsa');
-  await map().locator('a[href="#/control/bsa:BSA-06"]').click();
+  await map().locator('a[href="#/control/bsa:BSA-06"]').first().click();
   assert.match(await title(), /Transaction Monitoring/i);
   const leaf = await page.locator('[data-flow]').innerText() + await page.locator('[data-inspector]').innerText();
   for (const fact of ['bsa_alert.created', 'Hermetic', 'Live', 'In scope']) assert.ok(leaf.includes(fact), `control leaf shows ${fact}`);
@@ -132,13 +132,15 @@ test('a reviewer drills BSA policy → BSA-06 → its traced path → one decisi
 });
 
 test('every other edge function drills file by file, and every file is reachable', async () => {
-  for (const fn of ['aggregator', 'blnk-webhook', 'blnk-reconcile', 'drill']) {
+  for (const fn of ['aggregator', 'blnk-webhook', 'blnk-reconcile', 'drill', '_shared', 'analytics']) {
     await open('#/container/' + fn);
-    const want = readdirSync(join(ROOT, 'core/supabase/functions', fn)).filter(f => f.endsWith('.ts'));
+    const dir = fn === 'analytics' ? join(ROOT, 'analytics') : join(ROOT, 'core/supabase/functions', fn);
+    const want = readdirSync(dir).filter(f => fn === 'analytics' ? /\.(sh|sql)$/.test(f) : f.endsWith('.ts'));
     const shown = await map().locator('a[href^="#/file/"]').evaluateAll(as => as.map(a => decodeURIComponent(a.getAttribute('href').slice('#/file/'.length))));
     assert.deepEqual(want.filter(f => !shown.includes(fn + '/' + f)), [], `every ${fn} file is on the map`);
   }
-  await map().locator(`a[href="#/file/${encodeURIComponent('drill/run.ts')}"]`).click();
+  await open('#/container/drill');
+  await map().locator(`a[href="#/file/${encodeURIComponent('drill/run.ts')}"]`).first().click();
   assert.equal(await title(), 'drill/run.ts');
   assert.match(await page.locator('[data-inspector]').innerText(), /Drill runner/i, 'file purpose comes from its source header');
   await crumbs().getByRole('button', {name: 'Control drill'}).click();
@@ -147,13 +149,13 @@ test('every other edge function drills file by file, and every file is reachable
 
 test('Postgres drills to a table\'s columns and a state machine\'s states', async () => {
   await open('#/container/postgres');
-  await map().locator(`a[href="#/table/${encodeURIComponent('core.account')}"]`).click();
+  await map().locator(`a[href="#/table/${encodeURIComponent('core.account')}"]`).first().click();
   assert.equal(await title(), 'core.account');
   const cols = await map().innerText();
   for (const col of ['blnk_ledger_id', 'lock_type', 'maturity_date']) assert.ok(cols.includes(col), `table leaf shows column ${col}`);
   assert.match(await page.locator('.maphint').innerText(), /boundary reached/i);
   await crumbs().getByRole('button', {name: 'Postgres'}).click();
-  await map().locator(`a[href="#/machine/${encodeURIComponent('Account')}"]`).click();
+  await map().locator(`a[href="#/machine/${encodeURIComponent('Account')}"]`).first().click();
   assert.match(await map().innerText(), /open[\s\S]*frozen[\s\S]*closed/, 'machine leaf lists its declared states');
 });
 
@@ -163,8 +165,8 @@ test('the staff console drills page by page, and every page is reachable', async
     .map(String).filter(f => f.endsWith('.jsx') && !f.split('/').pop().startsWith('_')).map(f => f.replaceAll('\\', '/'));
   const shown = await map().locator('a[href^="#/page/"]').evaluateAll(as => as.map(a => decodeURIComponent(a.getAttribute('href').slice('#/page/'.length))));
   assert.deepEqual(want.filter(f => !shown.includes(f)), [], 'every ui/src/pages/*.jsx is on the map');
-  await map().locator(`a[href="#/page/${encodeURIComponent('compliance.jsx')}"]`).click();
-  await map().locator(`a[href="#/op/${encodeURIComponent('GET /governance/obligations')}"]`).waitFor();
+  await map().locator(`a[href="#/page/${encodeURIComponent('compliance.jsx')}"]`).first().click();
+  await map().locator(`a[href="#/op/${encodeURIComponent('GET /governance/obligations')}"]`).first().waitFor();
   await crumbs().getByRole('button', {name: 'Staff console'}).click();
   assert.equal(await title(), 'Staff console');
 });
@@ -175,8 +177,73 @@ test('a control\'s event drills to its emit site, and the pipeline to a concrete
   assert.equal(await title(), 'bsa_alert.created');
   assert.match(await map().innerText(), /bsa\.ts/, 'event leaf names its emit site');
   await open('#/pipeline');
-  await map().locator(`a[href="#/step/${encodeURIComponent('scripts/gen_architecture.py')}"]`).click();
+  await map().locator(`a[href="#/step/${encodeURIComponent('scripts/gen_architecture.py')}"]`).first().click();
   assert.match(await page.locator('[data-inspector]').innerText(), /rebuild_artifacts/, 'step leaf explains its place in the order');
+});
+
+// Every kind of view, by a representative permalink: the map must be a drawn
+// flow diagram (boxes joined by rendered edges), and Engineering detail must
+// change what it shows.
+const EVERY_VIEW = ['#/overview', '#/api', '#/domain/payments', '#/module/transfers', `#/op/${encodeURIComponent('POST /transfers')}`,
+  '#/policy', '#/policy/bsa', '#/control/bsa:BSA-06', '#/event/bsa_alert.created', '#/container/aggregator', '#/container/blnk-webhook',
+  '#/container/blnk-reconcile', '#/container/drill', '#/container/_shared', '#/container/analytics', `#/file/${encodeURIComponent('drill/run.ts')}`,
+  '#/container/postgres', '#/table/core.account', '#/machine/Account', '#/container/ui', `#/page/${encodeURIComponent('compliance.jsx')}`,
+  '#/container/blnk', '#/pipeline', `#/step/${encodeURIComponent('scripts/gen_architecture.py')}`,
+  '#/routing', '#/rails', '#/control', '#/process/detect', '#/process/triage', '#/process/decide', '#/implementation/threshold'];
+const toggle = async on => { const box = page.locator('[data-engineering]'); if (await box.isChecked() !== on) await box.click(); };
+
+test('every view is a flow diagram: boxes joined by drawn, labeled edges', async () => {
+  await toggle(false);
+  for (const hash of EVERY_VIEW) {
+    await open(hash);
+    const d = await map().evaluate(el => ({
+      diagrams: el.querySelectorAll('[data-diagram]').length,
+      boxes: el.querySelectorAll('[data-diagram] .dnode').length,
+      edges: [...el.querySelectorAll('path.dedge')].filter(p => p.getTotalLength() > 8).length,
+      labels: el.querySelectorAll('.dlabel').length,
+      // an edge must start and end on real boxes in the diagram
+      dangling: [...el.querySelectorAll('path.dedge')].filter(p => !el.querySelector(`[data-dnode="${CSS.escape(p.dataset.from)}"],[data-dgroup="${CSS.escape(p.dataset.from)}"]`) || !el.querySelector(`[data-dnode="${CSS.escape(p.dataset.to)}"],[data-dgroup="${CSS.escape(p.dataset.to)}"]`)).length,
+    }));
+    assert.ok(d.diagrams >= 1, `${hash} draws a diagram`);
+    assert.ok(d.boxes >= 3, `${hash} has at least three boxes (${d.boxes})`);
+    assert.ok(d.edges >= 2, `${hash} draws at least two edges (${d.edges})`);
+    assert.ok(d.labels >= 1, `${hash} labels its edges`);
+    assert.equal(d.dangling, 0, `${hash} has no edge to a missing box`);
+  }
+});
+
+test('a drawn edge never passes through a box it does not connect', async () => {
+  for (const hash of ['#/overview', '#/module/transfers', '#/domain/payments', '#/routing', '#/process/detect', '#/container/postgres']) {
+    await open(hash);
+    const crossings = await map().evaluate(el => {
+      const boxes = [...el.querySelectorAll('[data-diagram] .dnode')].map(n => [n.dataset.dnode, n.getBoundingClientRect()]);
+      const hits = [];
+      for (const p of el.querySelectorAll('path.dedge')) {
+        const len = p.getTotalLength(), m = p.getScreenCTM();
+        for (let s = 6; s < len - 6; s += 4) {
+          const q = p.getPointAtLength(s), x = m.a * q.x + m.e, y = m.d * q.y + m.f;
+          for (const [id, r] of boxes) if (id !== p.dataset.from && id !== p.dataset.to && x > r.left + 2 && x < r.right - 2 && y > r.top + 2 && y < r.bottom - 2) hits.push(`${p.dataset.from}→${p.dataset.to} crosses ${id}`);
+        }
+      }
+      return [...new Set(hits)];
+    });
+    assert.deepEqual(crossings, [], hash);
+  }
+});
+
+test('Engineering detail changes every view, adding identifiers to the boxes', async () => {
+  for (const hash of EVERY_VIEW) {
+    await toggle(false);
+    await open(hash);
+    const plain = await page.locator('.workspace').innerText();
+    await toggle(true);
+    const eng = await page.locator('.workspace').innerText();
+    assert.notEqual(eng, plain, `${hash}: Engineering detail changes nothing`);
+    assert.ok(await map().locator('.dnode .tech').count() > 0, `${hash}: boxes gain identifiers`);
+    await page.reload();
+    assert.ok(await page.locator('[data-engineering]').isChecked(), 'the choice survives a reload');
+  }
+  await toggle(false);
 });
 
 test('old permalinks still land on the traced BSA-06 views', async () => {

@@ -71,6 +71,9 @@ FUNCTIONS = [
     ("blnk-reconcile", "Blnk reconciler", "core/supabase/functions/blnk-reconcile/index.ts"),
     ("drill", "Control drill", "core/supabase/functions/drill/run.ts"),
 ]
+# Not deployables, but code the deployables import or schedule.
+SHARED = ("_shared", "Shared function code", "core/supabase/functions/_shared/blnk.ts")
+ANALYTICS = "analytics"
 
 
 def read(rel):
@@ -84,6 +87,22 @@ def header(text):
         if line.startswith("//"):
             lines.append(line[2:].strip())
         elif lines or line.strip():
+            break
+    paras = " ".join(l if l else "\n" for l in lines).split("\n")
+    return " ".join(p.strip() for p in paras if p.strip())[:600]
+
+
+def header_any(text):
+    """Leading comment block of a TS (//), shell (#) or SQL (--) file."""
+    lines = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("#!") and not lines:
+            continue
+        m = re.match(r"(//|--|#)\s?(.*)$", s)
+        if m:
+            lines.append(m.group(2).strip())
+        elif lines or s:
             break
     paras = " ".join(l if l else "\n" for l in lines).split("\n")
     return " ".join(p.strip() for p in paras if p.strip())[:600]
@@ -228,14 +247,26 @@ def build():
 
     # --- the other edge functions: every file, its header, exports and imports
     files, fn_texts = {}, {}
-    for fid, _, _entry in FUNCTIONS:
+    for fid in [f[0] for f in FUNCTIONS] + [SHARED[0]]:
         for p in sorted((ROOT / "core/supabase/functions" / fid).glob("*.ts")):
             text = p.read_text(encoding="utf-8")
             rel = f"{fid}/{p.name}"
             fn_texts[rel] = text
             files[rel] = {"fn": fid, "file": f"core/supabase/functions/{rel}", "lines": text.count("\n") + 1,
                           "about": header(text), "exports": exports_of(text), "test": p.name.endswith(".test.ts"),
-                          "imports": sorted({i for i in re.findall(r'from\s+"\./([\w.]+)\.ts"', text) if i + ".ts" != p.name})}
+                          "imports": sorted({i for i in re.findall(r'from\s+"\./([\w.]+)\.ts"', text) if i + ".ts" != p.name}),
+                          # imports that cross into another function directory: ../api/bsa.ts -> "api/bsa.ts"
+                          "crossImports": sorted(set(re.findall(r'from\s+"\.\./([\w-]+/[\w.]+\.ts)"', text)))}
+    for p in sorted([*(ROOT / ANALYTICS).glob("*.sh"), *(ROOT / ANALYTICS).glob("*.sql")]):
+        text = p.read_text(encoding="utf-8")
+        rel = f"{ANALYTICS}/{p.name}"
+        fn_texts[rel] = text
+        files[rel] = {"fn": ANALYTICS, "file": rel, "lines": text.count("\n") + 1, "about": header_any(text),
+                      "exports": [], "test": False,
+                      "imports": sorted({i for i in re.findall(r"analytics/([\w.]+\.(?:sh|sql))", text) if i != p.name}),
+                      "crossImports": []}
+    for m in modules:
+        modules[m]["crossImports"] = sorted(set(re.findall(r'from\s+"\.\./([\w-]+/[\w.]+\.ts)"', sources[m])))
 
     # --- postgres: replay the migrations in order; creates define, alters add, drops remove
     tables = {}
@@ -257,12 +288,49 @@ def build():
                 t["columns"].append([m.group(3), m.group(4).strip()])
         for m in re.finditer(r'drop table (?:if exists )?"?(\w+)"?\."?(\w+)"?', text, re.IGNORECASE):
             tables.pop(f"{m.group(1)}.{m.group(2)}", None)
-    for t in tables.values():
-        # static references only: supabase .from("name") and SQL "schema"."name"
-        pat = re.compile(r'from\(\s*["\']' + re.escape(t["name"]) + r'["\']'
-                         + r'|"' + re.escape(t["schema"]) + r'"\."' + re.escape(t["name"]) + '"')
-        t["modules"] = sorted(m for m, s in sources.items() if pat.search(s))
-        t["functionFiles"] = sorted(rel for rel, s in fn_texts.items() if pat.search(s))
+    fk_rx = re.compile(r'alter table "?(\w+)"?\."?(\w+)"? add constraint "?\w+"? foreign key \("?(\w+)"?\) '
+                       r'references "?(\w+)"?\."?(\w+)"?', re.IGNORECASE)
+    for p in sorted((ROOT / "core/supabase/migrations").glob("*.sql")):
+        for m in fk_rx.finditer(p.read_text(encoding="utf-8")):
+            src_t, dst = tables.get(f"{m.group(1)}.{m.group(2)}"), f"{m.group(4)}.{m.group(5)}"
+            if src_t and dst in tables and [m.group(3), dst] not in src_t.setdefault("fks", []):
+                src_t["fks"].append([m.group(3), dst])
+    by_name = {}
+    for key, t in tables.items():
+        by_name.setdefault(t["name"], []).append(key)
+
+    def table_refs(text):
+        """Tables a source names, schema resolved from its call chain (static only)."""
+        refs, chained = set(), set()
+        # db.schema("core").from("account"), or a ternary that names several schemas
+        for m in re.finditer(r'schema\(([^)]*)\)\s*\.from\(\s*["\'](\w+)["\']', text):
+            chained.add(m.start(2))
+            for sch in re.findall(r'["\'](\w+)["\']', m.group(1)):
+                if f"{sch}.{m.group(2)}" in tables:
+                    refs.add(f"{sch}.{m.group(2)}")
+        # a bare .from("x") uses the client's schema: core when it exists there
+        for m in re.finditer(r'\.from\(\s*["\'](\w+)["\']', text):
+            if m.start(1) not in chained:
+                keys = by_name.get(m.group(1), [])
+                refs |= {f"core.{m.group(1)}"} if f"core.{m.group(1)}" in tables else set(keys)
+        # SQL / shell: "schema"."name" or schema.name
+        for m in re.finditer(r'"?\b(\w+)"?\."?(\w+)\b"?', text):
+            if f"{m.group(1)}.{m.group(2)}" in tables:
+                refs.add(f"{m.group(1)}.{m.group(2)}")
+        return refs
+
+    module_refs = {m: table_refs(s) for m, s in sources.items()}
+    file_refs = {rel: table_refs(s) for rel, s in fn_texts.items()}
+    for key, t in tables.items():
+        t.setdefault("fks", [])
+        t["referencedBy"] = sorted(k for k, o in tables.items() if any(d == key for _, d in o.get("fks", [])))
+        t["modules"] = sorted(m for m, r in module_refs.items() if key in r)
+        t["functionFiles"] = sorted(rel for rel, r in file_refs.items() if key in r)
+    for m in modules.values():
+        m["tables"] = []
+    for key, t in tables.items():
+        for m in t["modules"]:
+            modules[m]["tables"].append(key)
 
     # --- staff console: every page and the operations its source names
     pages = {}
@@ -289,8 +357,23 @@ def build():
             about = d.group(1).strip() if d else ""
         else:
             about = header(stext)
-        steps.append({"script": script, "shLine": n, "about": about[:300],
-                      "note": raw.split("#", 1)[1].strip() if "#" in raw else ""})
+        note = raw.split("#", 1)[1].strip() if "#" in raw else ""
+        outs = re.match(r"->\s*(.+)", note)
+        steps.append({"script": script, "shLine": n, "about": about[:300], "note": note,
+                      "gate": note.startswith("GATE"),
+                      "outputs": [o.strip() for o in re.split(r"\s\+\s", outs.group(1))] if outs else []})
+
+    # --- CI: which workflow runs which script, on which triggers
+    workflows = {}
+    for p in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        text = p.read_text(encoding="utf-8")
+        name = re.search(r"^name:\s*(.+)$", text, re.MULTILINE)
+        doc = spec_io.yaml.safe_load(text) or {}
+        on = doc.get(True, doc.get("on")) or {}
+        workflows[p.name] = {
+            "name": name.group(1).strip().strip("\"'") if name else p.stem, "file": ".github/workflows/" + p.name,
+            "triggers": sorted(on) if isinstance(on, dict) else [on] if isinstance(on, str) else sorted(on),
+            "runs": sorted(set(re.findall(r"((?:scripts|analytics|core/[\w/-]+)/[\w./-]+\.(?:py|sh|ts))", text)))}
 
     # --- every event code: its emit sites and the controls it serves
     events = {code: {"sites": s, "triggerOf": [], "producedBy": []} for code, s in emit_sites.items()}
@@ -320,6 +403,38 @@ def build():
                           "specLine": spec_text.count("\n", 0, idx) + 2 if idx > -1 else 1,
                           "tables": sorted(k for k, t in tables.items()
                                            if re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower() == t["name"])}
+    # Container-to-container edges, each from a static reference in source.
+    def dir_of(rel):
+        return rel.split("/", 1)[0]
+    links = {}
+    def link(a, b, kind, n=1):
+        if a != b:
+            links.setdefault((a, b, kind), 0)
+            links[(a, b, kind)] += n
+    for m, mod in modules.items():
+        for x in mod["crossImports"]:
+            link("api", dir_of(x), "imports")
+    for rel, f in files.items():
+        for x in f["crossImports"]:
+            link(f["fn"], dir_of(x), "imports")
+    for key, t in tables.items():
+        # one count per distinct table a container references
+        for rel in sorted({dir_of(r) for r in t["functionFiles"]} | ({"api"} if t["modules"] else set())):
+            link(rel, "postgres", "tables")
+    for rel, f in files.items():
+        if f["fn"] == SHARED[0] and not f["test"] and re.search(r"BLNK_|fetch\(", fn_texts[rel]):
+            link(SHARED[0], "blnk", "calls")
+    if any(o["ui"] for o in ops.values()):
+        link("ui", "api", "ui", sum(o["ui"] for o in ops.values()))
+    for wf, w in workflows.items():
+        for r in w["runs"]:
+            d = "analytics" if r.startswith("analytics/") else r.split("/")[3] if r.startswith("core/supabase/functions/") else None
+            if d:
+                link("ci:" + wf, d, "runs")
+    links = [{"from": a, "to": b, "kind": k, "count": n} for (a, b, k), n in sorted(links.items())]
+
+    readme = read(ANALYTICS + "/README.md")
+    para = re.search(r"\n\n(.+?)\n\n", readme, re.DOTALL)
     containers = [
         {"id": "api", "title": "Core API", "kind": "Supabase edge function · Deno",
          "about": f"{len(ops)} operations across {len(modules)} modules", "href": "#/api"},
@@ -334,6 +449,11 @@ def build():
         {"id": "ui", "title": "Staff console", "kind": "Next.js on Vercel",
          "about": f"{len(pages)} pages · reads {sum(o['ui'] for o in ops.values())} UI-surface operations through a read-only proxy",
          "href": "#/container/ui"},
+        {"id": SHARED[0], "title": SHARED[1], "kind": "Imported by the edge functions",
+         "about": header(read(SHARED[2])), "file": SHARED[2], "href": "#/container/" + SHARED[0]},
+        {"id": ANALYTICS, "title": "Analytics", "kind": "DuckDB · scheduled jobs",
+         "about": re.sub(r"\s+", " ", para.group(1)).replace("**", "") if para else "", "file": ANALYTICS + "/README.md",
+         "href": "#/container/" + ANALYTICS},
         {"id": "policy", "title": "Policies & controls", "kind": "Compliance catalogue",
          "about": f"{len(policies)} policies · {len(controls)} controls", "href": "#/policy"},
         {"id": "pipeline", "title": "Specification & evidence", "kind": "Repository toolchain",
@@ -343,10 +463,11 @@ def build():
         "_comment": "GENERATED by scripts/gen_architecture.py from the spec, controls and source. Do not edit.",
         "counts": {"operations": len(ops), "modules": len(modules), "policies": len(policies), "controls": len(controls),
                    "events": len(emitters), "flows": len(flows), "tables": len(tables), "pages": len(pages),
-                   "machines": len(machines), "files": len(files), "steps": len(steps)},
+                   "machines": len(machines), "files": len(files), "steps": len(steps), "workflows": len(workflows)},
         "containers": containers, "domains": domains, "modules": modules, "operations": ops,
         "policies": policies, "controls": controls, "machines": machines, "pages": pages,
         "files": files, "tables": tables, "events": events, "steps": steps, "blnk": blnk,
+        "workflows": workflows, "links": links,
     }
 
 

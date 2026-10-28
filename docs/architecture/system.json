@@ -10,8 +10,9 @@
   "tables": 433,
   "pages": 13,
   "machines": 25,
-  "files": 20,
-  "steps": 19
+  "files": 32,
+  "steps": 19,
+  "workflows": 10
  },
  "containers": [
   {
@@ -73,6 +74,22 @@
    "kind": "Next.js on Vercel",
    "about": "13 pages · reads 18 UI-surface operations through a read-only proxy",
    "href": "#/container/ui"
+  },
+  {
+   "id": "_shared",
+   "title": "Shared function code",
+   "kind": "Imported by the edge functions",
+   "about": "blnk — shared writer client for Blnk Finance Core REST API. Writer contract: every Blnk write carries reference = table:id[:leg] and meta_data.core_resource so webhooks/reconcilers can route ledger events back to Postgres core rows, and duplicate POSTs are idempotent on reference. Mirrors are returned for the caller to persist; this module never touches the DB.",
+   "file": "core/supabase/functions/_shared/blnk.ts",
+   "href": "#/container/_shared"
+  },
+  {
+   "id": "analytics",
+   "title": "Analytics",
+   "kind": "DuckDB · scheduled jobs",
+   "about": "Local DuckDB attached read-only to the core Supabase project (architecture D18/D25: the per-instance analytical layer for aggregate control evaluation). Views query Postgres live through the `postgres` extension.",
+   "file": "analytics/README.md",
+   "href": "#/container/analytics"
   },
   {
    "id": "policy",
@@ -266,6 +283,14 @@
     "retention",
     "transfers",
     "wires"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.entity",
+    "core.event"
    ]
   },
   "ach": {
@@ -317,6 +342,14 @@
     "ledger-integrity",
     "reads",
     "transfers"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.ach_transfer",
+    "core.event"
    ]
   },
   "audit": {
@@ -423,7 +456,9 @@
    "gate": [],
    "flows": [
     "audit"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "auth": {
    "file": "core/supabase/functions/api/auth.ts",
@@ -489,7 +524,13 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [],
+   "tables": [
+    "core.partner",
+    "core.api_token",
+    "core.connection"
+   ]
   },
   "basel": {
    "file": "core/supabase/functions/api/basel.ts",
@@ -581,7 +622,9 @@
    "gate": [],
    "flows": [
     "basel"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "bsa": {
    "file": "core/supabase/functions/api/bsa.ts",
@@ -672,6 +715,11 @@
     "bsa",
     "bsa_program",
     "onboard_transfer_large_txn"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.case",
+    "core.event"
    ]
   },
   "bsa_program": {
@@ -818,6 +866,11 @@
    "flows": [
     "bsa_program",
     "unassessed"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.entity",
+    "core.originator"
    ]
   },
   "capital": {
@@ -924,6 +977,10 @@
     "capital",
     "deadlines",
     "internal_controls"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.threshold"
    ]
   },
   "cards": {
@@ -978,6 +1035,13 @@
     "ledger-integrity",
     "reads",
     "transfers"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.card_authorization"
    ]
   },
   "cash": {
@@ -1030,6 +1094,11 @@
    "flows": [
     "cash",
     "deadlines"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.account",
+    "core.entity"
    ]
   },
   "cash_ops": {
@@ -1200,7 +1269,9 @@
     "isolation",
     "people",
     "unassessed"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "cda": {
    "file": "core/supabase/functions/api/cda.ts",
@@ -1348,7 +1419,9 @@
    "gate": [],
    "flows": [
     "cda"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "collections": {
    "file": "core/supabase/functions/api/collections.ts",
@@ -1377,7 +1450,9 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [],
+   "tables": []
   },
   "complaints": {
    "file": "core/supabase/functions/api/complaints.ts",
@@ -1456,6 +1531,12 @@
    "flows": [
     "complaints",
     "unassessed"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account"
    ]
   },
   "controls": {
@@ -1481,6 +1562,10 @@
     "platform",
     "reads",
     "transfers"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.control_result"
    ]
   },
   "dashboard": {
@@ -1517,6 +1602,17 @@
    "flows": [
     "dashboard",
     "unassessed"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.bsa_alert",
+    "core.case",
+    "core.control_result",
+    "core.event",
+    "core.blnk_sync_state",
+    "sim.event",
+    "core.ctr_filing",
+    "core.payment_approval"
    ]
   },
   "deposits_member": {
@@ -1629,7 +1725,9 @@
    "gate": [],
    "flows": [
     "deposits"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "ecommerce": {
    "file": "core/supabase/functions/api/ecommerce.ts",
@@ -1687,6 +1785,10 @@
    "gate": [],
    "flows": [
     "ecommerce"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.finding"
    ]
   },
   "entities": {
@@ -1754,6 +1856,11 @@
     "transfers",
     "unassessed",
     "wires"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.entity",
+    "core.event"
    ]
   },
   "eps": {
@@ -1809,7 +1916,9 @@
     "eps",
     "transfers",
     "wires"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "eps_controls": {
    "file": "core/supabase/functions/api/eps_controls.ts",
@@ -1854,7 +1963,9 @@
    "gate": [],
    "flows": [
     "eps_controls"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "events": {
    "file": "core/supabase/functions/api/events.ts",
@@ -1883,6 +1994,12 @@
     "aggregator",
     "isolation",
     "platform"
+   ],
+   "crossImports": [
+    "aggregator/auth.ts"
+   ],
+   "tables": [
+    "core.event"
    ]
   },
   "governance": {
@@ -1928,6 +2045,10 @@
    ],
    "flows": [
     "governance"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.payment_approval"
    ]
   },
   "hr": {
@@ -1995,6 +2116,10 @@
     "cash_ops",
     "isolation",
     "people"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.training"
    ]
   },
   "incidents": {
@@ -2106,7 +2231,9 @@
     "basel",
     "deadlines",
     "incidents"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "index": {
    "file": "core/supabase/functions/api/index.ts",
@@ -2147,6 +2274,12 @@
     "aggregator",
     "dashboard",
     "platform"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account"
    ]
   },
   "investment": {
@@ -2297,6 +2430,12 @@
     "deadlines",
     "investment",
     "unassessed"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.insider",
+    "core.user",
+    "core.position"
    ]
   },
   "kyc": {
@@ -2351,6 +2490,13 @@
     "onboarding",
     "platform",
     "reads"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.control_result",
+    "core.entity",
+    "core.event",
+    "core.verification"
    ]
   },
   "lending": {
@@ -2394,7 +2540,9 @@
      ]
     }
    ],
-   "flows": []
+   "flows": [],
+   "crossImports": [],
+   "tables": []
   },
   "lending_underwriting": {
    "file": "core/supabase/functions/api/lending_underwriting.ts",
@@ -2436,7 +2584,12 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [],
+   "tables": [
+    "core.loan",
+    "core.adverse_action_notice"
+   ]
   },
   "lib": {
    "file": "core/supabase/functions/api/lib.ts",
@@ -2524,7 +2677,14 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [],
+   "tables": [
+    "core.account",
+    "core.ach_transfer",
+    "core.wire_transfer",
+    "core.idempotency_keys"
+   ]
   },
   "liquidity": {
    "file": "core/supabase/functions/api/liquidity.ts",
@@ -2636,7 +2796,9 @@
    "gate": [],
    "flows": [
     "liquidity"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "member_protection": {
    "file": "core/supabase/functions/api/member_protection.ts",
@@ -2706,6 +2868,13 @@
    "flows": [
     "isolation",
     "member_protection"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.verification"
    ]
   },
   "numbers": {
@@ -2742,6 +2911,12 @@
    "flows": [
     "onboarding",
     "platform"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.account",
+    "core.account_number",
+    "core.event"
    ]
   },
   "ops_security": {
@@ -2878,6 +3053,10 @@
    "flows": [
     "internal_controls",
     "people"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.user"
    ]
   },
   "ownership": {
@@ -2908,7 +3087,11 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [],
+   "tables": [
+    "core.partner"
+   ]
   },
   "platform": {
    "file": "core/supabase/functions/api/platform.ts",
@@ -2933,6 +3116,12 @@
    "gate": [],
    "flows": [
     "platform"
+   ],
+   "crossImports": [],
+   "tables": [
+    "aggregator.event",
+    "aggregator.fbo_position",
+    "aggregator.report_5300"
    ]
   },
   "primitives": {
@@ -2985,6 +3174,13 @@
    "gate": [],
    "flows": [
     "primitives"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.payment_approval",
+    "core.obligation",
+    "core.threshold",
+    "core.attestation"
    ]
   },
   "privacy": {
@@ -3139,6 +3335,10 @@
    "flows": [
     "isolation",
     "privacy"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.address"
    ]
   },
   "records_admin": {
@@ -3243,6 +3443,10 @@
     "deadlines",
     "records_admin",
     "retention"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.record"
    ]
   },
   "resolution": {
@@ -3313,6 +3517,13 @@
    "gate": [],
    "flows": [
     "resolution"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.records_package"
    ]
   },
   "retention": {
@@ -3404,7 +3615,9 @@
     "bsa",
     "records_admin",
     "retention"
-   ]
+   ],
+   "crossImports": [],
+   "tables": []
   },
   "risk_exceptions": {
    "file": "core/supabase/functions/api/risk_exceptions.ts",
@@ -3478,6 +3691,10 @@
    "gate": [],
    "flows": [
     "risk"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.risk"
    ]
   },
   "sandbox": {
@@ -3499,7 +3716,11 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": []
   },
   "simulate": {
    "file": "core/supabase/functions/api/simulate.ts",
@@ -3526,7 +3747,11 @@
    "gate": [],
    "flows": [
     "reads"
-   ]
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": []
   },
   "tail": {
    "file": "core/supabase/functions/api/tail.ts",
@@ -3647,6 +3872,10 @@
    "flows": [
     "eps_controls",
     "internal_controls"
+   ],
+   "crossImports": [],
+   "tables": [
+    "core.risk"
    ]
   },
   "test_helpers": {
@@ -3671,7 +3900,14 @@
    "events": [],
    "controls": [],
    "gate": [],
-   "flows": []
+   "flows": [],
+   "crossImports": [
+    "_shared/blnk.ts",
+    "_shared/pg_order.ts"
+   ],
+   "tables": [
+    "core.account"
+   ]
   },
   "transfers": {
    "file": "core/supabase/functions/api/transfers.ts",
@@ -3784,6 +4020,19 @@
     "resolution",
     "transfers",
     "wires"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.bookkeeping_entry",
+    "core.control_result",
+    "core.event",
+    "core.transfer",
+    "core.ofac_screen",
+    "core.account_freeze",
+    "core.institution_freeze"
    ]
   },
   "wires": {
@@ -3842,6 +4091,14 @@
     "reads",
     "transfers",
     "wires"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
+   ],
+   "tables": [
+    "core.account",
+    "core.event",
+    "core.wire_transfer"
    ]
   }
  },
@@ -34494,7 +34751,8 @@
     ]
    ],
    "test": false,
-   "imports": []
+   "imports": [],
+   "crossImports": []
   },
   "aggregator/handler.ts": {
    "fn": "aggregator",
@@ -34510,7 +34768,8 @@
    "test": false,
    "imports": [
     "auth"
-   ]
+   ],
+   "crossImports": []
   },
   "aggregator/index.ts": {
    "fn": "aggregator",
@@ -34521,7 +34780,8 @@
    "test": false,
    "imports": [
     "handler"
-   ]
+   ],
+   "crossImports": []
   },
   "blnk-webhook/handlers.test.ts": {
    "fn": "blnk-webhook",
@@ -34533,7 +34793,8 @@
    "imports": [
     "handlers",
     "types"
-   ]
+   ],
+   "crossImports": []
   },
   "blnk-webhook/handlers.ts": {
    "fn": "blnk-webhook",
@@ -34565,6 +34826,11 @@
    "test": false,
    "imports": [
     "types"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts",
+    "api/bsa.ts",
+    "api/lib.ts"
    ]
   },
   "blnk-webhook/index.ts": {
@@ -34577,7 +34843,8 @@
    "imports": [
     "handlers",
     "types"
-   ]
+   ],
+   "crossImports": []
   },
   "blnk-webhook/types.ts": {
    "fn": "blnk-webhook",
@@ -34586,7 +34853,8 @@
    "about": "Blnk webhook payload shapes. `data` is a loose contract — Blnk warns fields vary by transaction type and version, so treat everything as optional and tolerate unknown keys. See https://docs.blnkfinance.com/webhooks/events",
    "exports": [],
    "test": false,
-   "imports": []
+   "imports": [],
+   "crossImports": []
   },
   "blnk-reconcile/index.ts": {
    "fn": "blnk-reconcile",
@@ -34597,6 +34865,9 @@
    "test": false,
    "imports": [
     "sweeps"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
    ]
   },
   "blnk-reconcile/sweeps.test.ts": {
@@ -34608,6 +34879,9 @@
    "test": true,
    "imports": [
     "sweeps"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts"
    ]
   },
   "blnk-reconcile/sweeps.ts": {
@@ -34678,7 +34952,12 @@
     ]
    ],
    "test": false,
-   "imports": []
+   "imports": [],
+   "crossImports": [
+    "_shared/blnk.ts",
+    "blnk-webhook/handlers.ts",
+    "blnk-webhook/types.ts"
+   ]
   },
   "drill/cases.ts": {
    "fn": "drill",
@@ -34698,6 +34977,22 @@
    "test": false,
    "imports": [
     "drill"
+   ],
+   "crossImports": [
+    "_shared/blnk.ts",
+    "api/accounts.ts",
+    "api/ach.ts",
+    "api/bsa.ts",
+    "api/cards.ts",
+    "api/cash.ts",
+    "api/eps.ts",
+    "api/governance.ts",
+    "api/kyc.ts",
+    "api/lending.ts",
+    "api/primitives.ts",
+    "api/retention.ts",
+    "api/transfers.ts",
+    "api/wires.ts"
    ]
   },
   "drill/controls_grading.ts": {
@@ -34722,7 +35017,8 @@
    "test": false,
    "imports": [
     "firers"
-   ]
+   ],
+   "crossImports": []
   },
   "drill/controls_live_run.ts": {
    "fn": "drill",
@@ -34737,7 +35033,8 @@
     "drill",
     "firers",
     "live_db"
-   ]
+   ],
+   "crossImports": []
   },
   "drill/controls_test_run.ts": {
    "fn": "drill",
@@ -34752,7 +35049,8 @@
     "drill",
     "fake_db",
     "firers"
-   ]
+   ],
+   "crossImports": []
   },
   "drill/drill.ts": {
    "fn": "drill",
@@ -34780,6 +35078,9 @@
    "test": false,
    "imports": [
     "fake_db"
+   ],
+   "crossImports": [
+    "api/auth.ts"
    ]
   },
   "drill/fake_db.ts": {
@@ -34802,7 +35103,10 @@
     ]
    ],
    "test": false,
-   "imports": []
+   "imports": [],
+   "crossImports": [
+    "_shared/pg_order.ts"
+   ]
   },
   "drill/fake_db_permissions.test.ts": {
    "fn": "drill",
@@ -34811,7 +35115,8 @@
    "about": "fake_db derives column defaults and NULL backfill by parsing supabase/migrations/*.sql at test time, and DEGRADES SILENTLY to empty maps when it cannot read them. That degrade is deliberate (a missing permission should not throw inside an unrelated test) — but it once turned a missing --allow-read into 24 scattered null-vs-undefined failures that looked like broken controls. This test makes the cause name itself.",
    "exports": [],
    "test": true,
-   "imports": []
+   "imports": [],
+   "crossImports": []
   },
   "drill/firers.ts": {
    "fn": "drill",
@@ -34841,7 +35146,46 @@
     ]
    ],
    "test": false,
-   "imports": []
+   "imports": [],
+   "crossImports": [
+    "api/accounts.ts",
+    "api/ach.ts",
+    "api/audit.ts",
+    "api/basel.ts",
+    "api/bsa.ts",
+    "api/bsa_program.ts",
+    "api/capital.ts",
+    "api/cards.ts",
+    "api/cash.ts",
+    "api/cash_ops.ts",
+    "api/cda.ts",
+    "api/collections.ts",
+    "api/complaints.ts",
+    "api/deposits_member.ts",
+    "api/ecommerce.ts",
+    "api/entities.ts",
+    "api/eps.ts",
+    "api/eps_controls.ts",
+    "api/governance.ts",
+    "api/hr.ts",
+    "api/incidents.ts",
+    "api/investment.ts",
+    "api/kyc.ts",
+    "api/lending.ts",
+    "api/lending_underwriting.ts",
+    "api/liquidity.ts",
+    "api/member_protection.ts",
+    "api/ops_security.ts",
+    "api/primitives.ts",
+    "api/privacy.ts",
+    "api/records_admin.ts",
+    "api/resolution.ts",
+    "api/retention.ts",
+    "api/risk_exceptions.ts",
+    "api/tail.ts",
+    "api/transfers.ts",
+    "api/wires.ts"
+   ]
   },
   "drill/live_db.ts": {
    "fn": "drill",
@@ -34859,7 +35203,8 @@
     ]
    ],
    "test": false,
-   "imports": []
+   "imports": [],
+   "crossImports": []
   },
   "drill/run.ts": {
    "fn": "drill",
@@ -34871,7 +35216,207 @@
    "imports": [
     "cases",
     "drill"
-   ]
+   ],
+   "crossImports": []
+  },
+  "_shared/blnk.test.ts": {
+   "fn": "_shared",
+   "file": "core/supabase/functions/_shared/blnk.test.ts",
+   "lines": 351,
+   "about": "",
+   "exports": [],
+   "test": true,
+   "imports": [
+    "blnk"
+   ],
+   "crossImports": []
+  },
+  "_shared/blnk.ts": {
+   "fn": "_shared",
+   "file": "core/supabase/functions/_shared/blnk.ts",
+   "lines": 443,
+   "about": "blnk — shared writer client for Blnk Finance Core REST API. Writer contract: every Blnk write carries reference = table:id[:leg] and meta_data.core_resource so webhooks/reconcilers can route ledger events back to Postgres core rows, and duplicate POSTs are idempotent on reference. Mirrors are returned for the caller to persist; this module never touches the DB.",
+   "exports": [
+    [
+     "blnkConfigFromEnv",
+     14
+    ],
+    [
+     "BlnkError",
+     24
+    ],
+    [
+     "blnkReference",
+     41
+    ],
+    [
+     "customerLedgerId",
+     45
+    ],
+    [
+     "getTransaction",
+     193
+    ],
+    [
+     "searchTransactions",
+     209
+    ],
+    [
+     "getTransactionByReference",
+     233
+    ],
+    [
+     "recordTransaction",
+     242
+    ],
+    [
+     "commitInflight",
+     329
+    ],
+    [
+     "voidInflight",
+     357
+    ],
+    [
+     "transactionMirror",
+     398
+    ],
+    [
+     "createCustomerBalance",
+     406
+    ],
+    [
+     "getBalance",
+     427
+    ],
+    [
+     "balanceMirror",
+     434
+    ]
+   ],
+   "test": false,
+   "imports": [],
+   "crossImports": []
+  },
+  "_shared/pg_order.ts": {
+   "fn": "_shared",
+   "file": "core/supabase/functions/_shared/pg_order.ts",
+   "lines": 68,
+   "about": "Postgres ORDER BY semantics, for the test doubles. This exists because both doubles got null ordering WRONG in the same way and neither could have been caught by the other. drill/fake_db.ts coerced NULL to \"\" before comparing, and api/test_helpers.ts's listDb did not sort at all — so between them they modelled \"NULLs last\" and \"whatever order the fixture was written in\", and Postgres does neither. The rule being modelled, which is easy to get backwards: ORDER BY col ASC   -> NULLS LAST   (nulls are \"largest\") ORDER BY col DESC  -> NULLS FIRST So a DESC page over a column with nulls LEADS with ",
+   "exports": [
+    [
+     "pgCompare",
+     39
+    ],
+    [
+     "pgOrderBy",
+     61
+    ]
+   ],
+   "test": false,
+   "imports": [],
+   "crossImports": []
+  },
+  "analytics/aggregator_views.sql": {
+   "fn": "analytics",
+   "file": "analytics/aggregator_views.sql",
+   "lines": 50,
+   "about": "Aggregator spanning views (card 62): one query surface over hot Postgres and cold Parquet. Loaded by the reporter jobs (and duck.sh users who .read it) AFTER at least one archive run exists — read_parquet errors on an empty glob, and that error is correct: querying \"the archive\" before an archive exists should be loud, not an empty result. The watermark is the partition line. Cold serves sequence_id <= watermark from Parquet; hot serves sequence_id > watermark from Postgres. Rows still physically present in Postgres at/below the watermark are deliberately NOT read from there — every event has ",
+   "exports": [],
+   "test": false,
+   "imports": [],
+   "crossImports": []
+  },
+  "analytics/archive.sh": {
+   "fn": "analytics",
+   "file": "analytics/archive.sh",
+   "lines": 44,
+   "about": "Card 62 — the sync mechanism: watermark archiving to Parquet. Exports aggregator.event rows in (last watermark, current max] to one Parquet file per run under analytics/archive/, then advances the watermark in Postgres. The spanning view (aggregator_views.sql) serves rows above the watermark from hot Postgres and rows at/below it from cold Parquet, so a query crosses both tiers without double-counting. Idempotent: a re-run with no new rows archives nothing — but STILL stamps archived_at (the card-18 liveness lesson: a run that found no work is evidence of liveness and must say so).",
+   "exports": [],
+   "test": false,
+   "imports": [],
+   "crossImports": []
+  },
+  "analytics/bsa_reporter.sh": {
+   "fn": "analytics",
+   "file": "analytics/bsa_reporter.sh",
+   "lines": 67,
+   "about": "Card 59 — BSA Reporter: the scheduled 90-day lookback. The BSA Approver (card 58) flags sub-threshold aggregates with requires_lookback=true but only sees a 24-hour window in hot Postgres. This job answers the debt: for every flagged entity it totals sub-threshold money movement over the trailing lookback horizon ACROSS BOTH TIERS (hot Postgres + cold Parquet, card 62's spanning view) and writes a SAR candidate row back to Postgres when the pattern holds at that horizon. The horizon and the threshold come from aggregator.parameter (structuring_lookback_days, ctr_threshold_cents — 90 / 1000000 ",
+   "exports": [],
+   "test": false,
+   "imports": [
+    "aggregator_views.sql"
+   ],
+   "crossImports": []
+  },
+  "analytics/demo_queries.sql": {
+   "fn": "analytics",
+   "file": "analytics/demo_queries.sql",
+   "lines": 23,
+   "about": "Canned demo queries. Run all: ./analytics/duck.sh -f analytics/demo_queries.sql",
+   "exports": [],
+   "test": false,
+   "imports": [
+    "duck.sh"
+   ],
+   "crossImports": []
+  },
+  "analytics/duck.sh": {
+   "fn": "analytics",
+   "file": "analytics/duck.sh",
+   "lines": 19,
+   "about": "Launch DuckDB attached read-only to the core Supabase project (architecture D18/D25: instance analytics layer). Requires SUPABASE_DB_URL in .env.local — use the SESSION pooler URI (port 5432), not the transaction pooler. ./analytics/duck.sh                 # interactive shell, views ready ./analytics/duck.sh -f query.sql    # run a script and exit",
+   "exports": [],
+   "test": false,
+   "imports": [
+    "views.sql"
+   ],
+   "crossImports": []
+  },
+  "analytics/prune.sh": {
+   "fn": "analytics",
+   "file": "analytics/prune.sh",
+   "lines": 41,
+   "about": "TODO §7 item 4 — physical pruning of archived aggregator rows. Deletes hot Postgres rows that the cold tier already serves. The upper bound is the max sequence covered by Parquet files COMMITTED to git (git ls-files, not the working tree): a row leaves Postgres only after the archive of record holds it. aggregator.prune_archived tightens the bound further (archive watermark, min consumer cursor) and keeps rows younger than 72h regardless — see migration 20260811000100 for the full rule. Idempotent: a re-run with nothing eligible deletes nothing and says so. Scheduled via .github/workflows/aggr",
+   "exports": [],
+   "test": false,
+   "imports": [],
+   "crossImports": []
+  },
+  "analytics/report_5300.sh": {
+   "fn": "analytics",
+   "file": "analytics/report_5300.sh",
+   "lines": 62,
+   "about": "Card 60 — 5300 Reporter: the scheduled call-report aggregation. One row per instance per run-day: settled money movement (from the spanning view — hot Postgres + cold Parquet), alert counts, and the FBO position. That position is now DERIVED — `aggregator.fbo_position` became a view over open member share balances in migration 20260817000100, and the payment_hub consumer that used to accumulate it is gone — so this reporter reads a number that cannot disagree with its own inputs, rather than a number some consumer maintained. The row set is the evidence that \"a scheduled 5300 aggregation runs\"",
+   "exports": [],
+   "test": false,
+   "imports": [
+    "aggregator_views.sql"
+   ],
+   "crossImports": []
+  },
+  "analytics/seed.sh": {
+   "fn": "analytics",
+   "file": "analytics/seed.sh",
+   "lines": 79,
+   "about": "Seed the demo: drive the deployed `api` function to create synthetic accounts and a burst of book transfers that generates volume and deliberately trips every control. Re-runnable — each run uses a fresh run-id so idempotency keys and accounts never collide (volume accumulates across runs, which is fine). ./analytics/seed.sh Needs DEMO_API_KEY in .env.local (same key the api function verifies). All money is synthetic; funded from Blnk's @OpeningFunding external balance.",
+   "exports": [],
+   "test": false,
+   "imports": [
+    "demo_queries.sql",
+    "duck.sh"
+   ],
+   "crossImports": []
+  },
+  "analytics/views.sql": {
+   "fn": "analytics",
+   "file": "analytics/views.sql",
+   "lines": 68,
+   "about": "Analytical views over the live core schema (attached as `pg`, read-only). Re-created on every duck.sh launch; safe to edit and relaunch. jsonb columns arrive as JSON text — extracted with the json extension.",
+   "exports": [],
+   "test": false,
+   "imports": [],
+   "crossImports": []
   }
  },
  "tables": {
@@ -34966,16 +35511,22 @@
      "boolean not null default false"
     ]
    ],
+   "fks": [],
+   "referencedBy": [
+    "core.account_number"
+   ],
    "modules": [
     "accounts",
     "ach",
     "cards",
     "cash",
     "complaints",
-    "deposits_member",
+    "index",
+    "lib",
     "member_protection",
     "numbers",
     "resolution",
+    "test_helpers",
     "transfers",
     "wires"
    ],
@@ -35023,6 +35574,13 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [
+    [
+     "account_id",
+     "core.account"
+    ]
+   ],
+   "referencedBy": [],
    "modules": [
     "numbers"
    ],
@@ -35083,10 +35641,15 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "ach"
+    "ach",
+    "lib"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "core.address": {
    "schema": "core",
@@ -35143,6 +35706,8 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "privacy"
    ],
@@ -35189,10 +35754,14 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "transfers"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "blnk-webhook/handlers.ts"
+   ]
   },
   "core.bsa_alert": {
    "schema": "core",
@@ -35245,11 +35814,19 @@
      "timestamptz"
     ]
    ],
+   "fks": [
+    [
+     "event_id",
+     "core.event"
+    ]
+   ],
+   "referencedBy": [],
    "modules": [
-    "bsa",
     "dashboard"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "core.card": {
    "schema": "core",
@@ -35286,9 +35863,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cards"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.card_authorization": {
@@ -35342,10 +35919,15 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "cards"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "_shared/blnk.ts",
+    "drill/cases.ts"
+   ]
   },
   "core.case": {
    "schema": "core",
@@ -35414,9 +35996,10 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "bsa",
-    "bsa_program",
     "dashboard"
    ],
    "functionFiles": [
@@ -35498,6 +36081,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -35600,6 +36185,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -35706,10 +36293,12 @@
      "is not null and \"root_cause_tag\" is not null"
     ]
    ],
-   "modules": [
-    "complaints"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.control_result": {
    "schema": "core",
@@ -35758,6 +36347,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "controls",
     "dashboard",
@@ -35853,11 +36444,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "complaints",
-    "privacy"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.document": {
    "schema": "core",
@@ -35898,9 +36490,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.entity": {
@@ -36002,16 +36594,17 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "accounts",
     "bsa_program",
     "cash",
     "entities",
-    "kyc",
-    "member_protection",
-    "privacy"
+    "kyc"
    ],
    "functionFiles": [
+    "drill/cases.ts",
     "drill/firers.ts"
    ]
   },
@@ -36070,52 +36663,26 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [
+    "core.bsa_alert"
+   ],
    "modules": [
     "accounts",
     "ach",
-    "audit",
-    "basel",
     "bsa",
-    "bsa_program",
-    "capital",
-    "cards",
-    "cash",
-    "cash_ops",
-    "cda",
-    "collections",
-    "complaints",
     "dashboard",
-    "deposits_member",
-    "ecommerce",
     "entities",
-    "eps",
-    "eps_controls",
     "events",
-    "governance",
-    "hr",
-    "incidents",
-    "investment",
     "kyc",
-    "lending",
-    "lending_underwriting",
-    "liquidity",
-    "member_protection",
     "numbers",
-    "ops_security",
-    "platform",
-    "primitives",
-    "privacy",
-    "records_admin",
-    "resolution",
-    "retention",
-    "risk_exceptions",
-    "tail",
     "transfers",
     "wires"
    ],
    "functionFiles": [
-    "aggregator/handler.ts",
-    "blnk-reconcile/sweeps.ts"
+    "blnk-reconcile/sweeps.ts",
+    "drill/controls_grading.ts",
+    "drill/firers.ts"
    ]
   },
   "core.filing": {
@@ -36185,9 +36752,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.finding": {
@@ -36317,6 +36884,8 @@
      "text not null default 'unknown'"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "ecommerce"
    ],
@@ -36399,6 +36968,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -36521,11 +37092,9 @@
      "timestamptz"
     ]
    ],
-   "modules": [
-    "basel",
-    "cash_ops",
-    "incidents"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -36625,6 +37194,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -36667,9 +37238,10 @@
      "jsonb"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "lending_underwriting",
-    "tail"
+    "investment"
    ],
    "functionFiles": [
     "drill/firers.ts"
@@ -36738,9 +37310,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "retention"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.loan": {
@@ -36998,8 +37570,9 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "collections",
     "lending_underwriting"
    ],
    "functionFiles": [
@@ -37177,11 +37750,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "deposits_member",
-    "lending",
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -37217,6 +37788,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "bsa_program"
    ],
@@ -37249,6 +37822,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -37311,8 +37886,9 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "cash_ops",
     "resolution"
    ],
    "functionFiles": []
@@ -37444,6 +38020,8 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "risk_exceptions",
     "tail"
@@ -37497,6 +38075,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -37615,9 +38195,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.training": {
@@ -37779,6 +38359,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "hr"
    ],
@@ -37831,6 +38413,8 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "transfers"
    ],
@@ -37863,11 +38447,11 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "hr",
     "investment",
-    "ops_security",
-    "risk_exceptions"
+    "ops_security"
    ],
    "functionFiles": []
   },
@@ -37962,11 +38546,11 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "bsa_program",
     "kyc",
-    "member_protection",
-    "privacy"
+    "member_protection"
    ],
    "functionFiles": [
     "drill/firers.ts"
@@ -38035,11 +38619,14 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "bsa_program",
+    "lib",
     "wires"
    ],
    "functionFiles": [
+    "drill/cases.ts",
     "drill/firers.ts"
    ]
   },
@@ -38102,6 +38689,8 @@
      "integer not null default 0"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": [
     "blnk-webhook/index.ts"
@@ -38134,6 +38723,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "dashboard"
    ],
@@ -38182,6 +38773,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "lib"
    ],
@@ -38214,6 +38807,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -38248,11 +38843,16 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "auth",
-    "privacy"
+    "ownership"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "drill/fake_db.ts",
+    "drill/firers.ts"
+   ]
   },
   "core.api_token": {
    "schema": "core",
@@ -38317,9 +38917,10 @@
      "text[] not null default '{}'"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "auth",
-    "privacy"
+    "auth"
    ],
    "functionFiles": []
   },
@@ -38366,52 +38967,14 @@
      "integer not null default 1"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "accounts",
-    "ach",
-    "audit",
-    "basel",
-    "bsa",
-    "bsa_program",
-    "capital",
-    "cards",
-    "cash",
-    "cash_ops",
-    "cda",
-    "collections",
-    "complaints",
-    "dashboard",
-    "deposits_member",
-    "ecommerce",
-    "entities",
-    "eps",
-    "eps_controls",
-    "events",
-    "governance",
-    "hr",
-    "incidents",
-    "investment",
-    "kyc",
-    "lending",
-    "lending_underwriting",
-    "liquidity",
-    "member_protection",
-    "numbers",
-    "ops_security",
-    "platform",
-    "primitives",
-    "privacy",
-    "records_admin",
-    "resolution",
-    "retention",
-    "risk_exceptions",
-    "tail",
-    "transfers",
-    "wires"
+    "platform"
    ],
    "functionFiles": [
     "aggregator/handler.ts",
-    "blnk-reconcile/sweeps.ts"
+    "analytics/archive.sh"
    ]
   },
   "sim.control_result": {
@@ -38420,12 +38983,9 @@
    "migration": "core/supabase/migrations/20260719000900_evidence_provenance_and_sim_schema.sql",
    "line": 109,
    "columns": [],
-   "modules": [
-    "controls",
-    "dashboard",
-    "kyc",
-    "transfers"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.bsa_alert": {
@@ -38434,11 +38994,12 @@
    "migration": "core/supabase/migrations/20260719000900_evidence_provenance_and_sim_schema.sql",
    "line": 110,
    "columns": [],
-   "modules": [
-    "bsa",
-    "dashboard"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "sim.event": {
    "schema": "sim",
@@ -38451,52 +39012,15 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "accounts",
-    "ach",
-    "audit",
-    "basel",
-    "bsa",
-    "bsa_program",
-    "capital",
-    "cards",
-    "cash",
-    "cash_ops",
-    "cda",
-    "collections",
-    "complaints",
-    "dashboard",
-    "deposits_member",
-    "ecommerce",
-    "entities",
-    "eps",
-    "eps_controls",
-    "events",
-    "governance",
-    "hr",
-    "incidents",
-    "investment",
-    "kyc",
-    "lending",
-    "lending_underwriting",
-    "liquidity",
-    "member_protection",
-    "numbers",
-    "ops_security",
-    "platform",
-    "primitives",
-    "privacy",
-    "records_admin",
-    "resolution",
-    "retention",
-    "risk_exceptions",
-    "tail",
-    "transfers",
-    "wires"
+    "dashboard"
    ],
    "functionFiles": [
-    "aggregator/handler.ts",
-    "blnk-reconcile/sweeps.ts"
+    "drill/cases.ts",
+    "drill/controls_grading.ts",
+    "drill/run.ts"
    ]
   },
   "sim.case": {
@@ -38510,13 +39034,11 @@
      "text"
     ]
    ],
-   "modules": [
-    "bsa",
-    "bsa_program",
-    "dashboard"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
-    "drill/firers.ts"
+    "drill/cases.ts"
    ]
   },
   "core.record": {
@@ -38586,10 +39108,10 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "bsa_program",
-    "records_admin",
-    "retention"
+    "records_admin"
    ],
    "functionFiles": [
     "drill/firers.ts"
@@ -38601,13 +39123,11 @@
    "migration": "core/supabase/migrations/20260719001100_record_retention.sql",
    "line": 151,
    "columns": [],
-   "modules": [
-    "bsa_program",
-    "records_admin",
-    "retention"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
-    "drill/firers.ts"
+    "drill/cases.ts"
    ]
   },
   "sim.legal_hold": {
@@ -38616,9 +39136,9 @@
    "migration": "core/supabase/migrations/20260719001100_record_retention.sql",
    "line": 183,
    "columns": [],
-   "modules": [
-    "retention"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_transaction": {
@@ -38684,9 +39204,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.ctr_filing": {
@@ -38752,11 +39272,14 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "cash",
     "dashboard"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "sim.cash_transaction": {
    "schema": "sim",
@@ -38764,9 +39287,9 @@
    "migration": "core/supabase/migrations/20260719001400_cash_and_ctr.sql",
    "line": 138,
    "columns": [],
-   "modules": [
-    "cash"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ctr_filing": {
@@ -38775,11 +39298,12 @@
    "migration": "core/supabase/migrations/20260719001400_cash_and_ctr.sql",
    "line": 139,
    "columns": [],
-   "modules": [
-    "cash",
-    "dashboard"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "core.client_limit": {
    "schema": "core",
@@ -38824,9 +39348,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "eps"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.payment_approval": {
@@ -38888,9 +39412,12 @@
      "text not null default 'unknown'"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "dashboard",
-    "eps"
+    "governance",
+    "primitives"
    ],
    "functionFiles": []
   },
@@ -38900,11 +39427,12 @@
    "migration": "core/supabase/migrations/20260719001500_dual_control_and_client_limits.sql",
    "line": 164,
    "columns": [],
-   "modules": [
-    "dashboard",
-    "eps"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "sim.client_limit": {
    "schema": "sim",
@@ -38912,9 +39440,9 @@
    "migration": "core/supabase/migrations/20260719001500_dual_control_and_client_limits.sql",
    "line": 174,
    "columns": [],
-   "modules": [
-    "eps"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.obligation": {
@@ -38980,8 +39508,10 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "governance"
+    "primitives"
    ],
    "functionFiles": []
   },
@@ -39028,9 +39558,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "governance"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.obligation": {
@@ -39039,9 +39569,9 @@
    "migration": "core/supabase/migrations/20260719001600_governance_calendar.sql",
    "line": 123,
    "columns": [],
-   "modules": [
-    "governance"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.obligation_completion": {
@@ -39050,9 +39580,9 @@
    "migration": "core/supabase/migrations/20260719001600_governance_calendar.sql",
    "line": 124,
    "columns": [],
-   "modules": [
-    "governance"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.loan_party": {
@@ -39118,9 +39648,9 @@
      "jsonb"
     ]
    ],
-   "modules": [
-    "lending"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.adverse_action_notice": {
@@ -39190,8 +39720,9 @@
      "text"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "lending",
     "lending_underwriting"
    ],
    "functionFiles": []
@@ -39202,13 +39733,11 @@
    "migration": "core/supabase/migrations/20260719001700_lending_origination.sql",
    "line": 176,
    "columns": [],
-   "modules": [
-    "deposits_member",
-    "lending",
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
-    "drill/firers.ts"
+    "drill/cases.ts"
    ]
   },
   "sim.loan_party": {
@@ -39217,10 +39746,12 @@
    "migration": "core/supabase/migrations/20260719001700_lending_origination.sql",
    "line": 177,
    "columns": [],
-   "modules": [
-    "lending"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "sim.adverse_action_notice": {
    "schema": "sim",
@@ -39228,11 +39759,12 @@
    "migration": "core/supabase/migrations/20260719001700_lending_origination.sql",
    "line": 178,
    "columns": [],
-   "modules": [
-    "lending",
-    "lending_underwriting"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "core.work_item": {
    "schema": "core",
@@ -39317,9 +39849,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "primitives"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.threshold": {
@@ -39381,7 +39913,10 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
+    "capital",
     "primitives"
    ],
    "functionFiles": []
@@ -39421,9 +39956,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "primitives"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.attestation": {
@@ -39477,6 +40012,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "primitives"
    ],
@@ -39488,10 +40025,12 @@
    "migration": "core/supabase/migrations/20260719001800_control_primitives.sql",
    "line": 227,
    "columns": [],
-   "modules": [
-    "primitives"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "sim.threshold": {
    "schema": "sim",
@@ -39499,9 +40038,9 @@
    "migration": "core/supabase/migrations/20260719001800_control_primitives.sql",
    "line": 228,
    "columns": [],
-   "modules": [
-    "primitives"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.threshold_observation": {
@@ -39510,9 +40049,9 @@
    "migration": "core/supabase/migrations/20260719001800_control_primitives.sql",
    "line": 229,
    "columns": [],
-   "modules": [
-    "primitives"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.attestation": {
@@ -39521,10 +40060,12 @@
    "migration": "core/supabase/migrations/20260719001800_control_primitives.sql",
    "line": 230,
    "columns": [],
-   "modules": [
-    "primitives"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/cases.ts"
+   ]
   },
   "core.audit_engagement": {
    "schema": "core",
@@ -39617,9 +40158,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "audit"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.audit_finding": {
@@ -39705,9 +40246,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "audit"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -39718,9 +40259,9 @@
    "migration": "core/supabase/migrations/20260719001900_audit_engagements.sql",
    "line": 145,
    "columns": [],
-   "modules": [
-    "audit"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.audit_finding": {
@@ -39729,12 +40270,10 @@
    "migration": "core/supabase/migrations/20260719001900_audit_engagements.sql",
    "line": 146,
    "columns": [],
-   "modules": [
-    "audit"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "core.incident_sitrep": {
    "schema": "core",
@@ -39771,9 +40310,9 @@
      "text not null default 'unknown'"
     ]
    ],
-   "modules": [
-    "incidents"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.incident": {
@@ -39782,14 +40321,10 @@
    "migration": "core/supabase/migrations/20260719002000_incidents.sql",
    "line": 147,
    "columns": [],
-   "modules": [
-    "basel",
-    "cash_ops",
-    "incidents"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.incident_sitrep": {
    "schema": "sim",
@@ -39797,9 +40332,9 @@
    "migration": "core/supabase/migrations/20260719002000_incidents.sql",
    "line": 148,
    "columns": [],
-   "modules": [
-    "incidents"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.capital_position": {
@@ -39889,13 +40424,12 @@
      "text"
     ]
    ],
-   "modules": [
-    "capital",
-    "cda",
-    "investment",
-    "tail"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "sim.capital_position": {
    "schema": "sim",
@@ -39948,12 +40482,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "capital",
-    "cda",
-    "investment",
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.capital_target": {
@@ -40003,9 +40534,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "capital"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.capital_document": {
@@ -40063,9 +40594,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "capital"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.capital_target": {
@@ -40083,9 +40614,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "capital"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.capital_document": {
@@ -40094,9 +40625,9 @@
    "migration": "core/supabase/migrations/20260719002100_capital_position.sql",
    "line": 184,
    "columns": [],
-   "modules": [
-    "capital"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_auth_event": {
@@ -40146,9 +40677,9 @@
      "int not null default 0"
     ]
    ],
-   "modules": [
-    "eps_controls"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_card_control": {
@@ -40198,9 +40729,9 @@
      "int not null default 0"
     ]
    ],
-   "modules": [
-    "eps_controls"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_pospay_exception": {
@@ -40258,9 +40789,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "eps_controls"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_auth_event": {
@@ -40274,9 +40805,9 @@
      "int not null default 0"
     ]
    ],
-   "modules": [
-    "eps_controls"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_card_control": {
@@ -40290,9 +40821,9 @@
      "int not null default 0"
     ]
    ],
-   "modules": [
-    "eps_controls"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_pospay_exception": {
@@ -40301,9 +40832,9 @@
    "migration": "core/supabase/migrations/20260719002200_eps_auth_and_fraud.sql",
    "line": 94,
    "columns": [],
-   "modules": [
-    "eps_controls"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_policy": {
@@ -40349,9 +40880,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -40415,9 +40946,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda": {
@@ -40511,9 +41042,9 @@
      "is not null and \"account_label\" is not null"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -40561,9 +41092,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_cap_test": {
@@ -40637,9 +41168,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_distribution_window": {
@@ -40697,9 +41228,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_distribution": {
@@ -40773,9 +41304,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_fee_payment": {
@@ -40817,9 +41348,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_overlay": {
@@ -40857,9 +41388,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_trade": {
@@ -40909,9 +41440,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_reconciliation": {
@@ -40961,9 +41492,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_termination": {
@@ -41021,9 +41552,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_inkind_asset": {
@@ -41069,9 +41600,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_glossary_term": {
@@ -41117,9 +41648,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_communication": {
@@ -41181,9 +41712,9 @@
      "and \"marketing_approved_by\" is not null"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_audit_finding": {
@@ -41233,9 +41764,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cda_valuation_review": {
@@ -41277,9 +41808,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda": {
@@ -41288,12 +41819,10 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 455,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.cda_policy": {
    "schema": "sim",
@@ -41301,12 +41830,10 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 456,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.cda_vendor": {
    "schema": "sim",
@@ -41314,9 +41841,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 457,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_funding_request": {
@@ -41325,9 +41852,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 458,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_cap_test": {
@@ -41336,9 +41863,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 459,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_distribution": {
@@ -41347,9 +41874,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 460,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_distribution_window": {
@@ -41358,9 +41885,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 461,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_fee_payment": {
@@ -41369,9 +41896,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 462,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_overlay": {
@@ -41380,9 +41907,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 463,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_trade": {
@@ -41391,9 +41918,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 464,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_reconciliation": {
@@ -41402,9 +41929,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 465,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_termination": {
@@ -41413,9 +41940,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 466,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_inkind_asset": {
@@ -41424,9 +41951,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 467,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_glossary_term": {
@@ -41435,9 +41962,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 468,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_communication": {
@@ -41446,9 +41973,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 469,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_audit_finding": {
@@ -41457,9 +41984,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 470,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cda_valuation_review": {
@@ -41468,9 +41995,9 @@
    "migration": "core/supabase/migrations/20260719002300_cda.sql",
    "line": 471,
    "columns": [],
-   "modules": [
-    "cda"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_policy": {
@@ -41516,9 +42043,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_asset": {
@@ -41560,10 +42087,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.cash_limits_schedule": {
    "schema": "core",
@@ -41612,9 +42141,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_load": {
@@ -41676,9 +42205,9 @@
      "is not null and \"custodian_user_id\" is not null"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_enterprise_position": {
@@ -41748,9 +42277,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_reconciliation": {
@@ -41804,9 +42333,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.gl_cash_suspense": {
@@ -41860,9 +42389,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -41926,10 +42455,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.cash_shipment": {
    "schema": "core",
@@ -41998,9 +42529,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -42048,10 +42579,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program",
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -42115,9 +42645,9 @@
      "is not null and \"book_cents\" is not null"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_deviation": {
@@ -42179,10 +42709,12 @@
      "is not null and \"insurance_bond_adjustment\" is not null"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.cash_exception": {
    "schema": "core",
@@ -42223,9 +42755,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_kri": {
@@ -42287,9 +42819,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_policy": {
@@ -42298,9 +42830,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 376,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_asset": {
@@ -42309,9 +42841,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 377,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_limits_schedule": {
@@ -42320,9 +42852,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 378,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_load": {
@@ -42331,9 +42863,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 379,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_enterprise_position": {
@@ -42342,9 +42874,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 380,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_reconciliation": {
@@ -42353,9 +42885,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 381,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.gl_cash_suspense": {
@@ -42364,12 +42896,10 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 382,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.cash_overshort": {
    "schema": "sim",
@@ -42377,9 +42907,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 383,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_shipment": {
@@ -42388,12 +42918,10 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 384,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.cmir_filing": {
    "schema": "sim",
@@ -42401,13 +42929,10 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 385,
    "columns": [],
-   "modules": [
-    "bsa_program",
-    "cash_ops"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.cash_surprise_count": {
    "schema": "sim",
@@ -42415,9 +42940,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 386,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_deviation": {
@@ -42426,9 +42951,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 387,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_exception": {
@@ -42437,9 +42962,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 388,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cash_kri": {
@@ -42448,9 +42973,9 @@
    "migration": "core/supabase/migrations/20260719002400_cash_operations.sql",
    "line": 389,
    "columns": [],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.records_package": {
@@ -42459,10 +42984,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 234,
    "columns": [],
-   "modules": [
-    "cash_ops",
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.retention_schedule_entry": {
@@ -42520,10 +43044,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.record_class_unmatched": {
    "schema": "core",
@@ -42564,9 +43090,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.record_integrity_test": {
@@ -42628,9 +43154,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.storage_box": {
@@ -42676,9 +43202,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -42726,9 +43252,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.archive_confirmation": {
@@ -42774,9 +43300,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cdd_profile": {
@@ -42826,10 +43352,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program",
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.record_disposition": {
@@ -42871,9 +43396,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.records_policy_review": {
@@ -42923,9 +43448,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.records_contact": {
@@ -42967,9 +43492,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.retention_schedule_entry": {
@@ -42978,9 +43503,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 212,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.record_class_unmatched": {
@@ -42989,9 +43514,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 213,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.record_integrity_test": {
@@ -43000,9 +43525,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 214,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.storage_box": {
@@ -43011,12 +43536,10 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 215,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.destruction_log_mismatch": {
    "schema": "sim",
@@ -43024,9 +43547,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 216,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.archive_confirmation": {
@@ -43035,9 +43558,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 217,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cdd_profile": {
@@ -43046,10 +43569,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 218,
    "columns": [],
-   "modules": [
-    "bsa_program",
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.record_disposition": {
@@ -43058,9 +43580,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 219,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.records_policy_review": {
@@ -43069,9 +43591,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 220,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.records_contact": {
@@ -43080,9 +43602,9 @@
    "migration": "core/supabase/migrations/20260719002500_records_administration.sql",
    "line": 221,
    "columns": [],
-   "modules": [
-    "records_admin"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.credit_config": {
@@ -43140,10 +43662,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.credit_application_record": {
    "schema": "core",
@@ -43200,9 +43724,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.credit_report": {
@@ -43248,9 +43772,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.loan_exception": {
@@ -43316,10 +43840,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.appraisal_order": {
    "schema": "core",
@@ -43384,9 +43910,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.rate_sheet": {
@@ -43432,10 +43958,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.loan_pricing": {
    "schema": "core",
@@ -43496,9 +44024,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.prequalification": {
@@ -43548,9 +44076,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.fair_lending_analysis": {
@@ -43616,9 +44144,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.hmda_lar": {
@@ -43664,9 +44192,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.insider_loan_review": {
@@ -43732,9 +44260,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.credit_config": {
@@ -43743,9 +44271,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 322,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.credit_application_record": {
@@ -43754,9 +44282,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 323,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.credit_report": {
@@ -43765,9 +44293,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 324,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.loan_exception": {
@@ -43776,9 +44304,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 325,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.appraisal_order": {
@@ -43787,9 +44315,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 326,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.rate_sheet": {
@@ -43798,9 +44326,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 327,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.loan_pricing": {
@@ -43809,9 +44337,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 328,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.prequalification": {
@@ -43820,9 +44348,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 329,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.fair_lending_analysis": {
@@ -43831,9 +44359,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 330,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.hmda_lar": {
@@ -43842,9 +44370,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 331,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.insider": {
@@ -43853,13 +44381,10 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 332,
    "columns": [],
-   "modules": [
-    "lending_underwriting",
-    "tail"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.insider_loan_review": {
    "schema": "sim",
@@ -43867,9 +44392,9 @@
    "migration": "core/supabase/migrations/20260719002600_lending_underwriting.sql",
    "line": 333,
    "columns": [],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.instrument_list": {
@@ -43927,10 +44452,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.intermediary": {
    "schema": "core",
@@ -43987,9 +44514,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.credit_file": {
@@ -44047,9 +44574,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.security": {
@@ -44131,9 +44658,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -44189,9 +44716,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.position": {
@@ -44237,6 +44764,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "investment"
    ],
@@ -44287,9 +44816,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.repo_agreement": {
@@ -44355,9 +44884,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.liquidity_report": {
@@ -44411,9 +44940,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cfp_state": {
@@ -44459,9 +44988,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.alm_simulation": {
@@ -44515,9 +45044,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.performance_measurement": {
@@ -44563,9 +45092,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.sod_violation": {
@@ -44611,9 +45140,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.instrument_list": {
@@ -44622,9 +45151,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 405,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.intermediary": {
@@ -44633,9 +45162,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 406,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.credit_file": {
@@ -44644,9 +45173,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 407,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.security": {
@@ -44655,12 +45184,10 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 408,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.limit_set": {
    "schema": "sim",
@@ -44668,9 +45195,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 409,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.position": {
@@ -44679,12 +45206,10 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 410,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.trade": {
    "schema": "sim",
@@ -44692,9 +45217,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 411,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.trade_exception": {
@@ -44703,9 +45228,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 412,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.repo_agreement": {
@@ -44714,9 +45239,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 413,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.liquidity_report": {
@@ -44725,9 +45250,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 414,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cfp_state": {
@@ -44736,9 +45261,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 415,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.alm_simulation": {
@@ -44747,9 +45272,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 416,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.performance_measurement": {
@@ -44758,9 +45283,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 417,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.document": {
@@ -44769,9 +45294,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 418,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.sod_violation": {
@@ -44780,9 +45305,9 @@
    "migration": "core/supabase/migrations/20260719002700_investment_portfolio.sql",
    "line": 419,
    "columns": [],
-   "modules": [
-    "investment"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.complaint_trend": {
@@ -44852,9 +45377,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "complaints"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.complaint": {
@@ -44863,9 +45388,9 @@
    "migration": "core/supabase/migrations/20260719002800_complaints_disputes.sql",
    "line": 227,
    "columns": [],
-   "modules": [
-    "complaints"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.dispute": {
@@ -44874,10 +45399,9 @@
    "migration": "core/supabase/migrations/20260719002800_complaints_disputes.sql",
    "line": 228,
    "columns": [],
-   "modules": [
-    "complaints",
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.complaint_trend": {
@@ -44886,9 +45410,9 @@
    "migration": "core/supabase/migrations/20260719002800_complaints_disputes.sql",
    "line": 229,
    "columns": [],
-   "modules": [
-    "complaints"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.risk_appetite": {
@@ -44950,10 +45474,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.risk_breach": {
    "schema": "core",
@@ -45062,10 +45588,12 @@
      "text"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.risk_acceptance": {
    "schema": "core",
@@ -45150,9 +45678,9 @@
      "timestamptz"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -45200,9 +45728,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.control_exception": {
@@ -45260,9 +45788,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -45273,9 +45801,9 @@
    "migration": "core/supabase/migrations/20260719002900_access_risk_exceptions.sql",
    "line": 168,
    "columns": [],
-   "modules": [
-    "risk_exceptions"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.risk_breach": {
@@ -45289,9 +45817,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.risk_acceptance": {
@@ -45305,12 +45833,10 @@
      "timestamptz"
     ]
    ],
-   "modules": [
-    "risk_exceptions"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.control_override": {
    "schema": "sim",
@@ -45318,9 +45844,9 @@
    "migration": "core/supabase/migrations/20260719002900_access_risk_exceptions.sql",
    "line": 171,
    "columns": [],
-   "modules": [
-    "risk_exceptions"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.control_exception": {
@@ -45329,12 +45855,10 @@
    "migration": "core/supabase/migrations/20260719002900_access_risk_exceptions.sql",
    "line": 172,
    "columns": [],
-   "modules": [
-    "risk_exceptions"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "core.ofac_screen": {
    "schema": "core",
@@ -45395,11 +45919,14 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "bsa_program",
     "transfers"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.edd_profile": {
    "schema": "core",
@@ -45464,9 +45991,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.pep_screen": {
@@ -45516,9 +46043,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.monetary_instrument": {
@@ -45584,9 +46111,9 @@
      "and \"purchaser_id_type\" is not null"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.fbar_account": {
@@ -45632,9 +46159,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.fbar_filing": {
@@ -45688,9 +46215,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.regulatory_change": {
@@ -45752,9 +46279,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.escalation": {
@@ -45816,11 +46343,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "bsa_program",
-    "dashboard"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "sim.ofac_screen": {
    "schema": "sim",
@@ -45828,10 +46356,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 217,
    "columns": [],
-   "modules": [
-    "bsa_program",
-    "transfers"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.edd_profile": {
@@ -45840,9 +46367,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 218,
    "columns": [],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.pep_screen": {
@@ -45851,9 +46378,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 219,
    "columns": [],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.monetary_instrument": {
@@ -45862,9 +46389,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 220,
    "columns": [],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.fbar_account": {
@@ -45873,9 +46400,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 221,
    "columns": [],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.fbar_filing": {
@@ -45884,9 +46411,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 222,
    "columns": [],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.regulatory_change": {
@@ -45895,9 +46422,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 223,
    "columns": [],
-   "modules": [
-    "bsa_program"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.escalation": {
@@ -45906,10 +46433,9 @@
    "migration": "core/supabase/migrations/20260719003000_bsa_program.sql",
    "line": 224,
    "columns": [],
-   "modules": [
-    "bsa_program",
-    "dashboard"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.privacy_notice": {
@@ -45955,10 +46481,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.privacy_notice_delivery": {
    "schema": "core",
@@ -46007,9 +46535,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.esign_consent": {
@@ -46051,9 +46579,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -46113,9 +46641,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.privacy_state_request": {
@@ -46181,9 +46709,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.web_consent": {
@@ -46229,9 +46757,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.web_tag": {
@@ -46273,9 +46801,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.analytics_dataset": {
@@ -46337,9 +46865,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.biometric_verification": {
@@ -46397,9 +46925,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": [
     "drill/firers.ts"
    ]
@@ -46443,9 +46971,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.furnishing_dispute": {
@@ -46523,9 +47051,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.privacy_notice": {
@@ -46534,9 +47062,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 242,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.privacy_notice_delivery": {
@@ -46545,9 +47073,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 243,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.esign_consent": {
@@ -46556,12 +47084,10 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 244,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.privacy_preference": {
    "schema": "sim",
@@ -46569,9 +47095,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 245,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.privacy_state_request": {
@@ -46580,9 +47106,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 246,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.web_consent": {
@@ -46591,9 +47117,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 247,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.web_tag": {
@@ -46602,9 +47128,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 248,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.analytics_dataset": {
@@ -46613,9 +47139,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 249,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.biometric_verification": {
@@ -46624,12 +47150,10 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 250,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.minor_data_event": {
    "schema": "sim",
@@ -46637,9 +47161,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 251,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.furnishing_dispute": {
@@ -46648,9 +47172,9 @@
    "migration": "core/supabase/migrations/20260719003100_privacy.sql",
    "line": 252,
    "columns": [],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.record_hold": {
@@ -46684,9 +47208,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "retention"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.record_hold": {
@@ -46695,9 +47219,9 @@
    "migration": "core/supabase/migrations/20260719003200_legal_hold_multi.sql",
    "line": 43,
    "columns": [],
-   "modules": [
-    "retention"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.delinquency_evaluation": {
@@ -46747,10 +47271,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "collections"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.loan_modification": {
    "schema": "core",
@@ -46823,9 +47349,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.collection_contact": {
@@ -46875,9 +47401,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.overdraft_referral": {
@@ -46931,9 +47457,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.delinquency_evaluation": {
@@ -46942,9 +47468,9 @@
    "migration": "core/supabase/migrations/20260719003300_collections.sql",
    "line": 156,
    "columns": [],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.loan_modification": {
@@ -46953,9 +47479,9 @@
    "migration": "core/supabase/migrations/20260719003300_collections.sql",
    "line": 157,
    "columns": [],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.collection_contact": {
@@ -46964,9 +47490,9 @@
    "migration": "core/supabase/migrations/20260719003300_collections.sql",
    "line": 158,
    "columns": [],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.overdraft_referral": {
@@ -46975,9 +47501,9 @@
    "migration": "core/supabase/migrations/20260719003300_collections.sql",
    "line": 159,
    "columns": [],
-   "modules": [
-    "collections"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.disclosure_template": {
@@ -47027,10 +47553,12 @@
      "text"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.disclosure_delivery": {
    "schema": "core",
@@ -47095,9 +47623,9 @@
      "text"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.product_interest_config": {
@@ -47147,10 +47675,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.interest_accrual_run": {
    "schema": "core",
@@ -47191,9 +47721,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.statement": {
@@ -47247,9 +47777,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.membership": {
@@ -47323,9 +47853,9 @@
      "jsonb"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.member_address_change": {
@@ -47379,10 +47909,9 @@
      "boolean not null default false"
     ]
    ],
-   "modules": [
-    "cards",
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.service_request": {
@@ -47428,9 +47957,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.lo_comp_plan": {
@@ -47476,9 +48005,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.disclosure_template": {
@@ -47487,9 +48016,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 164,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.disclosure_delivery": {
@@ -47498,9 +48027,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 165,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.product_interest_config": {
@@ -47509,9 +48038,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 166,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.interest_accrual_run": {
@@ -47520,9 +48049,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 167,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.statement": {
@@ -47531,9 +48060,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 168,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.membership": {
@@ -47542,9 +48071,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 169,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.member_address_change": {
@@ -47553,10 +48082,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 170,
    "columns": [],
-   "modules": [
-    "cards",
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.service_request": {
@@ -47565,9 +48093,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 171,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.lo_comp_plan": {
@@ -47576,9 +48104,9 @@
    "migration": "core/supabase/migrations/20260719003400_deposits_member.sql",
    "line": 172,
    "columns": [],
-   "modules": [
-    "deposits_member"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.ecommerce_enrollment": {
@@ -47648,9 +48176,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "ecommerce"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.member_credential": {
@@ -47716,10 +48244,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "ecommerce"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.ecommerce_transaction": {
    "schema": "core",
@@ -47780,10 +48310,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "ecommerce"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.ecommerce_risk_assessment": {
    "schema": "core",
@@ -47836,9 +48368,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "ecommerce"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ecommerce_enrollment": {
@@ -47847,9 +48379,9 @@
    "migration": "core/supabase/migrations/20260719003500_ecommerce.sql",
    "line": 134,
    "columns": [],
-   "modules": [
-    "ecommerce"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.member_credential": {
@@ -47858,9 +48390,9 @@
    "migration": "core/supabase/migrations/20260719003500_ecommerce.sql",
    "line": 135,
    "columns": [],
-   "modules": [
-    "ecommerce"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ecommerce_transaction": {
@@ -47869,9 +48401,9 @@
    "migration": "core/supabase/migrations/20260719003500_ecommerce.sql",
    "line": 136,
    "columns": [],
-   "modules": [
-    "ecommerce"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ecommerce_risk_assessment": {
@@ -47880,9 +48412,9 @@
    "migration": "core/supabase/migrations/20260719003500_ecommerce.sql",
    "line": 137,
    "columns": [],
-   "modules": [
-    "ecommerce"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.lar_band_config": {
@@ -47932,9 +48464,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.liquidity_position": {
@@ -48000,10 +48532,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.maturity_mismatch": {
    "schema": "core",
@@ -48072,9 +48606,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.stress_assumption_set": {
@@ -48132,9 +48666,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.liquidity_stress_run": {
@@ -48192,9 +48726,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.liquidity_facility": {
@@ -48248,9 +48782,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.collateral_position": {
@@ -48312,9 +48846,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.liquidity_pack": {
@@ -48360,9 +48894,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.lar_band_config": {
@@ -48371,9 +48905,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 217,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.liquidity_position": {
@@ -48382,9 +48916,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 218,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.maturity_mismatch": {
@@ -48393,9 +48927,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 219,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.stress_assumption_set": {
@@ -48404,9 +48938,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 220,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.liquidity_stress_run": {
@@ -48415,9 +48949,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 221,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.liquidity_facility": {
@@ -48426,9 +48960,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 222,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.collateral_position": {
@@ -48437,9 +48971,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 223,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.liquidity_pack": {
@@ -48448,9 +48982,9 @@
    "migration": "core/supabase/migrations/20260719003600_liquidity.sql",
    "line": 224,
    "columns": [],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.account_freeze": {
@@ -48520,8 +49054,9 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "resolution",
     "transfers"
    ],
    "functionFiles": []
@@ -48589,8 +49124,9 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "resolution",
     "transfers"
    ],
    "functionFiles": []
@@ -48630,9 +49166,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.ewi_indicator": {
@@ -48670,10 +49206,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "resolution"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.ewi_observation": {
    "schema": "core",
@@ -48722,9 +49260,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.member_portal_state": {
@@ -48762,9 +49300,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.member_portal_access": {
@@ -48798,9 +49336,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.account_freeze": {
@@ -48809,10 +49347,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 227,
    "columns": [],
-   "modules": [
-    "resolution",
-    "transfers"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.institution_freeze": {
@@ -48821,10 +49358,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 228,
    "columns": [],
-   "modules": [
-    "resolution",
-    "transfers"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.resolution_posture": {
@@ -48833,9 +49369,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 229,
    "columns": [],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ewi_indicator": {
@@ -48844,9 +49380,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 230,
    "columns": [],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ewi_observation": {
@@ -48855,9 +49391,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 231,
    "columns": [],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.member_portal_state": {
@@ -48866,9 +49402,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 232,
    "columns": [],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.member_portal_access": {
@@ -48877,9 +49413,9 @@
    "migration": "core/supabase/migrations/20260719003700_resolution.sql",
    "line": 233,
    "columns": [],
-   "modules": [
-    "resolution"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.rwa_schedule": {
@@ -48945,11 +49481,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "basel",
-    "capital"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.capital_buffer": {
    "schema": "core",
@@ -49018,9 +49555,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cfp_liquidity_profile": {
@@ -49106,9 +49643,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.comms_tree": {
@@ -49146,9 +49683,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.pir": {
@@ -49194,10 +49731,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "basel",
-    "incidents"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.corrective_action": {
@@ -49259,10 +49795,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "basel"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "sim.rwa_schedule": {
    "schema": "sim",
@@ -49270,10 +49808,9 @@
    "migration": "core/supabase/migrations/20260719003800_basel_bcp.sql",
    "line": 194,
    "columns": [],
-   "modules": [
-    "basel",
-    "capital"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.capital_buffer": {
@@ -49282,9 +49819,9 @@
    "migration": "core/supabase/migrations/20260719003800_basel_bcp.sql",
    "line": 195,
    "columns": [],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.cfp_liquidity_profile": {
@@ -49293,9 +49830,9 @@
    "migration": "core/supabase/migrations/20260719003800_basel_bcp.sql",
    "line": 196,
    "columns": [],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.comms_tree": {
@@ -49304,9 +49841,9 @@
    "migration": "core/supabase/migrations/20260719003800_basel_bcp.sql",
    "line": 197,
    "columns": [],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.pir": {
@@ -49315,10 +49852,9 @@
    "migration": "core/supabase/migrations/20260719003800_basel_bcp.sql",
    "line": 198,
    "columns": [],
-   "modules": [
-    "basel",
-    "incidents"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.corrective_action": {
@@ -49327,9 +49863,9 @@
    "migration": "core/supabase/migrations/20260719003800_basel_bcp.sql",
    "line": 199,
    "columns": [],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.sod_rule": {
@@ -49371,10 +49907,12 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.access_role_grant": {
    "schema": "core",
@@ -49435,9 +49973,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.recon_item": {
@@ -49503,9 +50041,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.it_asset": {
@@ -49559,9 +50097,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_proposal": {
@@ -49623,9 +50161,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_control_review": {
@@ -49691,9 +50229,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_deployment": {
@@ -49767,9 +50305,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.affiliate": {
@@ -49803,9 +50341,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.affiliate_transaction": {
@@ -49891,9 +50429,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.sod_rule": {
@@ -49995,9 +50533,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.access_role_grant": {
@@ -50099,9 +50637,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.recon_item": {
@@ -50203,9 +50741,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.it_asset": {
@@ -50307,9 +50845,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_proposal": {
@@ -50411,9 +50949,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_control_review": {
@@ -50515,9 +51053,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_deployment": {
@@ -50619,9 +51157,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.affiliate": {
@@ -50723,9 +51261,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.affiliate_transaction": {
@@ -50827,9 +51365,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.capital_action": {
@@ -50931,9 +51469,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.capital_action": {
@@ -50987,9 +51525,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.redflag_case": {
@@ -51043,9 +51581,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.redflag_ruleset": {
@@ -51087,9 +51625,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.redflag_case": {
@@ -51143,9 +51681,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.redflag_ruleset": {
@@ -51199,9 +51737,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.wire_release": {
@@ -51255,9 +51793,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.ach_control_result": {
@@ -51303,9 +51841,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.eps_limit_change": {
@@ -51359,9 +51897,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.pospay_item": {
@@ -51407,9 +51945,9 @@
      "timestamptz not null default now()"
     ]
    ],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.wire_release": {
@@ -51418,9 +51956,9 @@
    "migration": "core/supabase/migrations/20260719003900_final_tail.sql",
    "line": 438,
    "columns": [],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.ach_control_result": {
@@ -51429,9 +51967,9 @@
    "migration": "core/supabase/migrations/20260719003900_final_tail.sql",
    "line": 439,
    "columns": [],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.eps_limit_change": {
@@ -51440,9 +51978,9 @@
    "migration": "core/supabase/migrations/20260719003900_final_tail.sql",
    "line": 440,
    "columns": [],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.pospay_item": {
@@ -51451,9 +51989,9 @@
    "migration": "core/supabase/migrations/20260719003900_final_tail.sql",
    "line": 441,
    "columns": [],
-   "modules": [
-    "tail"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "sim.finding": {
@@ -51462,12 +52000,10 @@
    "migration": "core/supabase/migrations/20260720000100_writer_schema_gaps.sql",
    "line": 38,
    "columns": [],
-   "modules": [
-    "ecommerce"
-   ],
-   "functionFiles": [
-    "blnk-webhook/handlers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "sim.verification": {
    "schema": "sim",
@@ -51480,15 +52016,10 @@
      "text"
     ]
    ],
-   "modules": [
-    "bsa_program",
-    "kyc",
-    "member_protection",
-    "privacy"
-   ],
-   "functionFiles": [
-    "drill/firers.ts"
-   ]
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": []
   },
   "aggregator.consumer_cursor": {
    "schema": "aggregator",
@@ -51509,6 +52040,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -51535,10 +52068,14 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "platform"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "analytics/report_5300.sh"
+   ]
   },
   "aggregator.alert": {
    "schema": "aggregator",
@@ -51579,6 +52116,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -51601,8 +52140,12 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
-   "functionFiles": []
+   "functionFiles": [
+    "analytics/archive.sh"
+   ]
   },
   "aggregator.sar_candidate": {
    "schema": "aggregator",
@@ -51647,6 +52190,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -51697,6 +52242,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
     "platform"
    ],
@@ -51729,6 +52276,8 @@
      "text not null default 'instance'"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": [
     "aggregator/handler.ts"
@@ -51765,6 +52314,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -51803,6 +52354,8 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
    "functionFiles": []
   },
@@ -51845,11 +52398,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "cash_ops",
-    "hr",
-    "ops_security"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.hr_action": {
@@ -51891,9 +52442,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "hr"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.cash_custody": {
@@ -51947,11 +52498,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "cash_ops",
-    "hr"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.cash_keybox_access": {
    "schema": "core",
@@ -51984,9 +52536,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "cash_ops"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.estate_claim": {
@@ -52044,10 +52596,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "member_protection"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.expulsion": {
    "schema": "core",
@@ -52124,10 +52678,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "member_protection"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.safe_mode": {
    "schema": "core",
@@ -52184,10 +52740,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "member_protection"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.privacy_disclosure": {
    "schema": "core",
@@ -52240,9 +52798,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.privacy_access_request": {
@@ -52296,9 +52854,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "privacy"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.connection": {
@@ -52352,11 +52910,14 @@
      "text not null default 'production'"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [
-    "auth",
-    "privacy"
+    "auth"
    ],
-   "functionFiles": []
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.insider_credit": {
    "schema": "core",
@@ -52425,9 +52986,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "lending_underwriting"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.access_grant": {
@@ -52473,11 +53034,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "hr",
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.backup_job": {
    "schema": "core",
@@ -52522,10 +53084,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.tls_certificate": {
    "schema": "core",
@@ -52562,10 +53126,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.security_review": {
    "schema": "core",
@@ -52602,9 +53168,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.vuln_finding": {
@@ -52642,10 +53208,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.siem_alert": {
    "schema": "core",
@@ -52678,10 +53246,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.siem_source": {
    "schema": "core",
@@ -52710,9 +53280,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.antivirus_event": {
@@ -52742,10 +53312,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.pentest_engagement": {
    "schema": "core",
@@ -52778,10 +53350,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.ai_tool": {
    "schema": "core",
@@ -52818,10 +53392,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.ai_violation": {
    "schema": "core",
@@ -52854,10 +53430,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "ops_security"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.liquidity_concentration": {
    "schema": "core",
@@ -52898,9 +53476,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.dq_tieout": {
@@ -52938,9 +53516,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.model_review": {
@@ -52974,9 +53552,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.ncua_notification": {
@@ -53010,10 +53588,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.regulator_request": {
    "schema": "core",
@@ -53050,10 +53630,12 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
-   "functionFiles": []
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
+   "functionFiles": [
+    "drill/firers.ts"
+   ]
   },
   "core.wholesale_exposure": {
    "schema": "core",
@@ -53094,9 +53676,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "liquidity"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.pillar3_disclosure": {
@@ -53130,9 +53712,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "basel"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "core.training_assignment": {
@@ -53166,9 +53748,9 @@
      "text not null default 'production'"
     ]
    ],
-   "modules": [
-    "hr"
-   ],
+   "fks": [],
+   "referencedBy": [],
+   "modules": [],
    "functionFiles": []
   },
   "aggregator.parameter": {
@@ -53194,8 +53776,12 @@
      "timestamptz not null default now()"
     ]
    ],
+   "fks": [],
+   "referencedBy": [],
    "modules": [],
-   "functionFiles": []
+   "functionFiles": [
+    "analytics/bsa_reporter.sh"
+   ]
   }
  },
  "events": {
@@ -69514,115 +70100,183 @@
    "script": "scripts/parse_core_api.py",
    "shLine": 9,
    "about": "Parse core-api.yaml (+ vocab-migration.json) into core-vocabulary.json.",
-   "note": "-> core-vocabulary.json"
+   "note": "-> core-vocabulary.json",
+   "gate": false,
+   "outputs": [
+    "core-vocabulary.json"
+   ]
   },
   {
    "script": "scripts/check_money_codes.py",
    "shLine": 10,
    "about": "Fail the build when the money-code allowlists drift from the spec.",
-   "note": "GATE: money allowlists == spec x-money"
+   "note": "GATE: money allowlists == spec x-money",
+   "gate": true,
+   "outputs": []
   },
   {
    "script": "scripts/extract_controls.py",
    "shLine": 11,
    "about": "extract_controls.py — Build a structured catalogue of every control across the",
-   "note": "-> controls.json"
+   "note": "-> controls.json",
+   "gate": false,
+   "outputs": [
+    "controls.json"
+   ]
   },
   {
    "script": "scripts/check_control_collisions.py",
    "shLine": 12,
    "about": "GATE: no two policies may define the same bare control id.",
-   "note": "GATE: one policy per bare control id (OQ-11)"
+   "note": "GATE: one policy per bare control id (OQ-11)",
+   "gate": true,
+   "outputs": []
   },
   {
    "script": "core/core-api-loop/migrate/author_control_rules.py",
    "shLine": 15,
    "about": "author_control_rules.py — project the policy EVENTS rules into core-api.yaml.",
-   "note": ""
+   "note": "",
+   "gate": false,
+   "outputs": []
   },
   {
    "script": "core/core-api-loop/migrate/derive_bound_controls.py",
    "shLine": 16,
    "about": "derive_bound_controls.py — wire the bidirectional contract by deriving x-bound-controls.",
-   "note": ""
+   "note": "",
+   "gate": false,
+   "outputs": []
   },
   {
    "script": "core/core-api-loop/migrate/author_descriptions.py",
    "shLine": 17,
    "about": "author_descriptions.py — make the spec render as rich GitBook docs (field tables + model pages).",
-   "note": ""
+   "note": "",
+   "gate": false,
+   "outputs": []
   },
   {
    "script": "scripts/build_control_vocabulary.py",
    "shLine": 18,
    "about": "build_control_vocabulary.py — Roll the per-control code references in controls.json",
-   "note": "-> control-vocabulary.json"
+   "note": "-> control-vocabulary.json",
+   "gate": false,
+   "outputs": [
+    "control-vocabulary.json"
+   ]
   },
   {
    "script": "scripts/extract_vocab.py",
    "shLine": 19,
    "about": "Extract vocabulary tokens from generated policy/procedure documents.",
-   "note": "-> extracted-vocab.json"
+   "note": "-> extracted-vocab.json",
+   "gate": false,
+   "outputs": [
+    "extracted-vocab.json"
+   ]
   },
   {
    "script": "scripts/build_crosswalk.py",
    "shLine": 23,
    "about": "Build the CG-* <-> catalogue crosswalk.",
-   "note": "-> crosswalk.json + CROSSWALK.md"
+   "note": "-> crosswalk.json + CROSSWALK.md",
+   "gate": false,
+   "outputs": [
+    "crosswalk.json",
+    "CROSSWALK.md"
+   ]
   },
   {
    "script": "scripts/build_dashboard.py",
    "shLine": 24,
    "about": "Generate the compliance catalogue manifest from controls.json.",
-   "note": "-> ui/public/compliance-manifest.json"
+   "note": "-> ui/public/compliance-manifest.json",
+   "gate": false,
+   "outputs": [
+    "ui/public/compliance-manifest.json"
+   ]
   },
   {
    "script": "core/verifier/generator/enumerate.py",
    "shLine": 25,
    "about": "enumerate.py — the deterministic backbone of the test-generation pipeline.",
-   "note": "-> core/verifier/targets.json + worklist.md"
+   "note": "-> core/verifier/targets.json + worklist.md",
+   "gate": false,
+   "outputs": [
+    "core/verifier/targets.json",
+    "worklist.md"
+   ]
   },
   {
    "script": "scripts/gen_proposed_surface.py",
    "shLine": 26,
    "about": "Generate docs/proposed-surface.md — the designed-but-unimplemented API.",
-   "note": "-> docs/proposed-surface.md (reads targets.json)"
+   "note": "-> docs/proposed-surface.md (reads targets.json)",
+   "gate": false,
+   "outputs": [
+    "docs/proposed-surface.md (reads targets.json)"
+   ]
   },
   {
    "script": "core/supabase/functions/drill/run.ts",
    "shLine": 27,
    "about": "Drill runner. Writes DRILL.md + drill.json, or checks for regressions. deno run --allow-all supabase/functions/drill/run.ts deno run --allow-all supabase/functions/drill/run.ts --check",
-   "note": "-> drill.json + docs/drill.md"
+   "note": "-> drill.json + docs/drill.md",
+   "gate": false,
+   "outputs": [
+    "drill.json",
+    "docs/drill.md"
+   ]
   },
   {
    "script": "scripts/gen_routes.py",
    "shLine": 28,
    "about": "Generate the router's route table from the spec.",
-   "note": "-> api/routes.gen.ts"
+   "note": "-> api/routes.gen.ts",
+   "gate": false,
+   "outputs": [
+    "api/routes.gen.ts"
+   ]
   },
   {
    "script": "scripts/gen_ui_contract.py",
    "shLine": 29,
    "about": "Generate the staff console's core-API contract from the spec.",
-   "note": "-> ui allowlist + types"
+   "note": "-> ui allowlist + types",
+   "gate": false,
+   "outputs": [
+    "ui allowlist",
+    "types"
+   ]
   },
   {
    "script": "scripts/gen_architecture.py",
    "shLine": 32,
    "about": "Generate the architecture explorer's full inventory from the canonical sources.",
-   "note": "-> docs/architecture/system.json (the explorer's inventory)"
+   "note": "-> docs/architecture/system.json (the explorer's inventory)",
+   "gate": false,
+   "outputs": [
+    "docs/architecture/system.json (the explorer's inventory)"
+   ]
   },
   {
    "script": "scripts/gen_state.py",
    "shLine": 33,
    "about": "Generate STATE.md — the one page of live numbers.",
-   "note": "-> STATE.md (the live numbers)"
+   "note": "-> STATE.md (the live numbers)",
+   "gate": false,
+   "outputs": [
+    "STATE.md (the live numbers)"
+   ]
   },
   {
    "script": "scripts/check_doc_claims.py",
    "shLine": 34,
    "about": "Gate: hand-written docs may not lie about paths or numbers.",
-   "note": "GATE: docs may not lie about paths/numbers"
+   "note": "GATE: docs may not lie about paths/numbers",
+   "gate": true,
+   "outputs": []
   }
  ],
  "blnk": {
@@ -69645,7 +70299,11 @@
    "wires"
   ],
   "files": [
+   "_shared/blnk.test.ts",
+   "_shared/blnk.ts",
    "aggregator/handler.ts",
+   "analytics/seed.sh",
+   "analytics/views.sql",
    "blnk-reconcile/index.ts",
    "blnk-reconcile/sweeps.test.ts",
    "blnk-reconcile/sweeps.ts",
@@ -69658,5 +70316,296 @@
    "drill/controls_test_run.ts",
    "drill/firers.ts"
   ]
- }
+ },
+ "workflows": {
+  "aggregator-reporters.yml": {
+   "name": "aggregator-reporters",
+   "file": ".github/workflows/aggregator-reporters.yml",
+   "triggers": [
+    "schedule",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "analytics/archive.sh",
+    "analytics/bsa_reporter.sh",
+    "analytics/prune.sh",
+    "analytics/report_5300.sh"
+   ]
+  },
+  "contract-tests.yml": {
+   "name": "contract-tests",
+   "file": ".github/workflows/contract-tests.yml",
+   "triggers": [
+    "schedule",
+    "workflow_dispatch"
+   ],
+   "runs": []
+  },
+  "core-ci.yml": {
+   "name": "core-ci",
+   "file": ".github/workflows/core-ci.yml",
+   "triggers": [
+    "pull_request",
+    "push",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "core/supabase/functions/aggregator/index.ts",
+    "core/supabase/functions/api/index.ts",
+    "core/supabase/functions/blnk-reconcile/index.ts",
+    "core/supabase/functions/blnk-webhook/index.ts",
+    "core/supabase/functions/drill/run.ts",
+    "scripts/build_crosswalk.py",
+    "scripts/build_dashboard.py",
+    "scripts/check_cursor_columns.py",
+    "scripts/check_decision_refs.py",
+    "scripts/check_emitted_coverage.py",
+    "scripts/check_route_parity.py",
+    "scripts/check_vocab_drift.py"
+   ]
+  },
+  "doc-gate.yml": {
+   "name": "doc-gate",
+   "file": ".github/workflows/doc-gate.yml",
+   "triggers": [
+    "pull_request",
+    "push",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "scripts/check_architecture.py",
+    "scripts/check_doc_claims.py",
+    "scripts/gen_architecture.py",
+    "scripts/gen_state.py"
+   ]
+  },
+  "extract-artifacts.yml": {
+   "name": "Rebuild controls + vocabulary artifacts",
+   "file": ".github/workflows/extract-artifacts.yml",
+   "triggers": [
+    "pull_request",
+    "push",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "core/supabase/functions/api/index.ts",
+    "core/supabase/functions/api/routes.gen.ts",
+    "scripts/check_emitted_coverage.py",
+    "scripts/check_route_parity.py",
+    "scripts/check_schema_parity.py",
+    "scripts/check_vocab_drift.py",
+    "scripts/rebuild_artifacts.sh"
+   ]
+  },
+  "live-control-tier.yml": {
+   "name": "live-control-tier",
+   "file": ".github/workflows/live-control-tier.yml",
+   "triggers": [
+    "schedule",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "core/supabase/functions/drill/controls_live_run.ts",
+    "scripts/gen_architecture.py",
+    "scripts/gen_state.py"
+   ]
+  },
+  "pages.yml": {
+   "name": "pages",
+   "file": ".github/workflows/pages.yml",
+   "triggers": [
+    "push",
+    "workflow_dispatch",
+    "workflow_run"
+   ],
+   "runs": [
+    "scripts/check_architecture.py",
+    "scripts/gen_architecture.py"
+   ]
+  },
+  "regenerate-policy.yml": {
+   "name": "Regenerate policy on prompt change",
+   "file": ".github/workflows/regenerate-policy.yml",
+   "triggers": [
+    "push",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "scripts/regenerate_policy.py"
+   ]
+  },
+  "smoke.yml": {
+   "name": "smoke",
+   "file": ".github/workflows/smoke.yml",
+   "triggers": [
+    "schedule",
+    "workflow_dispatch"
+   ],
+   "runs": []
+  },
+  "ui-ci.yml": {
+   "name": "ui-ci",
+   "file": ".github/workflows/ui-ci.yml",
+   "triggers": [
+    "pull_request",
+    "push",
+    "workflow_dispatch"
+   ],
+   "runs": [
+    "scripts/gen_ui_contract.py"
+   ]
+  }
+ },
+ "links": [
+  {
+   "from": "_shared",
+   "to": "blnk",
+   "kind": "calls",
+   "count": 1
+  },
+  {
+   "from": "_shared",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 1
+  },
+  {
+   "from": "aggregator",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 2
+  },
+  {
+   "from": "analytics",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 4
+  },
+  {
+   "from": "api",
+   "to": "_shared",
+   "kind": "imports",
+   "count": 13
+  },
+  {
+   "from": "api",
+   "to": "aggregator",
+   "kind": "imports",
+   "count": 1
+  },
+  {
+   "from": "api",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 42
+  },
+  {
+   "from": "blnk-reconcile",
+   "to": "_shared",
+   "kind": "imports",
+   "count": 3
+  },
+  {
+   "from": "blnk-reconcile",
+   "to": "blnk-webhook",
+   "kind": "imports",
+   "count": 2
+  },
+  {
+   "from": "blnk-reconcile",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 2
+  },
+  {
+   "from": "blnk-webhook",
+   "to": "_shared",
+   "kind": "imports",
+   "count": 1
+  },
+  {
+   "from": "blnk-webhook",
+   "to": "api",
+   "kind": "imports",
+   "count": 2
+  },
+  {
+   "from": "blnk-webhook",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 5
+  },
+  {
+   "from": "ci:aggregator-reporters.yml",
+   "to": "analytics",
+   "kind": "runs",
+   "count": 4
+  },
+  {
+   "from": "ci:core-ci.yml",
+   "to": "aggregator",
+   "kind": "runs",
+   "count": 1
+  },
+  {
+   "from": "ci:core-ci.yml",
+   "to": "api",
+   "kind": "runs",
+   "count": 1
+  },
+  {
+   "from": "ci:core-ci.yml",
+   "to": "blnk-reconcile",
+   "kind": "runs",
+   "count": 1
+  },
+  {
+   "from": "ci:core-ci.yml",
+   "to": "blnk-webhook",
+   "kind": "runs",
+   "count": 1
+  },
+  {
+   "from": "ci:core-ci.yml",
+   "to": "drill",
+   "kind": "runs",
+   "count": 1
+  },
+  {
+   "from": "ci:extract-artifacts.yml",
+   "to": "api",
+   "kind": "runs",
+   "count": 2
+  },
+  {
+   "from": "ci:live-control-tier.yml",
+   "to": "drill",
+   "kind": "runs",
+   "count": 1
+  },
+  {
+   "from": "drill",
+   "to": "_shared",
+   "kind": "imports",
+   "count": 2
+  },
+  {
+   "from": "drill",
+   "to": "api",
+   "kind": "imports",
+   "count": 51
+  },
+  {
+   "from": "drill",
+   "to": "postgres",
+   "kind": "tables",
+   "count": 83
+  },
+  {
+   "from": "ui",
+   "to": "api",
+   "kind": "ui",
+   "count": 18
+  }
+ ]
 }

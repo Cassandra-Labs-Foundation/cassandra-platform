@@ -16,3 +16,37 @@
 
 /* State machines: the declared state set drawn as a chain. */
 #control-atlas .statechain{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}#control-atlas .statechain .state{background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font:12px/1.4 ui-monospace,monospace}#control-atlas .statechain .statejoin{color:var(--muted);font-size:15px}
+
+/* Flow diagrams (diagram.mjs): rows of boxes, edges drawn underneath the boxes and above the group frames. */
+#control-atlas .diagram{position:relative;z-index:0;display:flex;flex-direction:column;gap:58px;padding:6px 2px 10px}
+#control-atlas .drow{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;align-items:stretch}
+#control-atlas .dgroup{position:relative;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-content:flex-start;border:1px dashed var(--line);border-radius:12px;padding:26px 10px 10px;flex:1 1 auto;min-width:0}
+#control-atlas .dgroup.plain{border:0;padding:0;flex:0 1 auto}
+#control-atlas .dglabel{position:absolute;top:7px;left:11px;right:11px;font:10px/1.3 ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#control-atlas .dnode{position:relative;z-index:2;flex:0 1 196px;min-width:132px;width:auto;padding:10px 12px}
+#control-atlas .dnode strong{font-size:13px;overflow-wrap:anywhere}
+#control-atlas .dnode .sub{font-size:11.5px;overflow-wrap:anywhere}
+#control-atlas .dnode.linked{border-left:3px solid var(--accent)}
+#control-atlas .dnode.t-current{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent)}
+#control-atlas .dnode.t-decision{background:var(--wash);border-radius:4px}
+#control-atlas .dnode.t-port{background:transparent;border:1px dashed var(--line);box-shadow:none;text-align:center}
+#control-atlas .dnode.t-port .sub{text-align:center}
+#control-atlas .dnode.t-person{border-radius:22px;text-align:center}
+#control-atlas .dnode.t-store{border-radius:9px 9px 18px 18px;border-bottom-width:3px}
+#control-atlas .dnode.t-external{border-style:dashed}
+#control-atlas .dnode.t-exit{border-color:var(--amber);background:var(--amberbg)}
+#control-atlas .dnode.t-more{background:transparent;border:1px dashed var(--accent);color:var(--accent);box-shadow:none;text-align:center;flex-basis:120px}
+#control-atlas .dnode.t-traced{border-style:dashed;border-left:3px dashed var(--accent)}
+#control-atlas .dnode.t-state{flex-basis:auto;min-width:0;border-radius:999px;padding:7px 16px;text-align:center}
+#control-atlas .dnode.t-state strong{font:12px/1.4 ui-monospace,monospace}
+#control-atlas .dedges{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}
+#control-atlas .dedge{fill:none;stroke:var(--muted);stroke-width:1.3;opacity:.85}
+#control-atlas .dedge.s-dashed{stroke-dasharray:6 4}
+#control-atlas .dedge.s-dotted{stroke-dasharray:2 3}
+#control-atlas .dhead{fill:var(--muted)}
+#control-atlas .dlabel{position:absolute;z-index:3;max-width:170px;font-size:10.5px;line-height:1.3;color:var(--muted);background:var(--canvas);border:1px solid var(--line);border-radius:5px;padding:1px 6px;text-align:center;pointer-events:none}
+#control-atlas .dsr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:0;padding:0}
+#control-atlas .dindex{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+#control-atlas .dindex>.boundarylabel{text-transform:uppercase}
+@media(max-width:600px){#control-atlas .diagram{gap:50px}#control-atlas .dnode{flex-basis:140px;min-width:118px}#control-atlas .dlabel{max-width:130px}}
+#control-atlas .dgroup{row-gap:34px}
