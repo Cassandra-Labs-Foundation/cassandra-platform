@@ -40,6 +40,18 @@ def validate(root=ROOT):
     for group in model['groups'].values():
         if group['selected'] not in model['nodes']:
             errors.append('Process refers to missing focus node')
+    # The generated inventory (gen_architecture.py --check owns its staleness).
+    # These are the two ways it can be current yet still incomplete or wrong.
+    system_path = root / 'docs/architecture/system.json'
+    if not system_path.is_file():
+        errors.append('Missing generated inventory: run python3 scripts/gen_architecture.py')
+        return errors
+    system = json.loads(system_path.read_text())
+    for domain in system['domains']:
+        if domain['id'] == 'unclassified':
+            errors.append('Modules missing from DOMAINS in scripts/gen_architecture.py: ' + ', '.join(domain['modules']))
+    if model.get('control') not in system['controls']:
+        errors.append(f"model.json names a control the catalogue lacks: {model.get('control')}")
     return errors
 
 if __name__ == '__main__':

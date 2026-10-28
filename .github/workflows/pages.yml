@@ -8,17 +8,22 @@
 # Pages serves from a `workflow` source (not "deploy from branch"): this job
 # stages the files under _site and uploads that. docs/pages-root.html becomes
 # the site index so the bare URL routes instead of 404ing, and /architecture/
-# is the interactive viewer plus its manually reviewed model and local assets.
+# is the interactive viewer, its hand-traced model and its generated inventory.
+#
+# No path filter: the inventory (system.json) is derived from the spec, the
+# api/ modules, the flows and the compliance artifacts, so almost any push can
+# change it. The job regenerates it from the pushed tree before staging, and
+# also runs after the artifact rebuild and the live-tier refresh, whose
+# bot-made commits would not trigger a push event.
 name: pages
 
 on:
   push:
     branches: [main]
-    paths:
-      - "docs/architecture/**"
-      - "docs/pages-root.html"
-      - "scripts/check_architecture.py"
-      - ".github/workflows/pages.yml"
+  workflow_run:
+    workflows: ["Rebuild controls + vocabulary artifacts", "live-control-tier"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -40,6 +45,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: main   # a workflow_run must publish main as it is now, bot commits included
+
+      - name: Regenerate the architecture inventory from this tree
+        run: |
+          python3 -m pip install pyyaml
+          python3 scripts/gen_architecture.py
 
       - name: Validate architecture snapshot and navigation
         run: |
@@ -51,7 +63,7 @@ jobs:
           set -euo pipefail
           mkdir -p _site/architecture
           cp docs/architecture/index.html docs/architecture/*.md docs/architecture/*.css docs/architecture/*.json _site/architecture/
-          cp docs/architecture/explorer.mjs docs/architecture/navigation.mjs _site/architecture/
+          cp docs/architecture/explorer.mjs docs/architecture/navigation.mjs docs/architecture/inventory.mjs _site/architecture/
           cp docs/pages-root.html _site/index.html   # the bare URL routes, not 404s
           # Fail loudly rather than deploying an empty site.
           test -f _site/index.html
@@ -59,6 +71,8 @@ jobs:
           test -f _site/architecture/README.md
           test -f _site/architecture/model.json
           test -f _site/architecture/explorer.mjs
+          test -f _site/architecture/system.json
+          test -f _site/architecture/inventory.mjs
           echo "staged $(find _site -type f | wc -l) files"
 
       - uses: actions/configure-pages@v5

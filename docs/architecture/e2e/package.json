@@ -1,0 +1,11 @@
+{
+  "name": "architecture-explorer-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test explorer.e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

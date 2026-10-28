@@ -19,3 +19,6 @@ core/supabase/.temp/
 # (created by `db push --linked` runs — the real project lives at core/supabase/)
 .DS_Store
 /supabase/
+
+# Node deps (the architecture explorer E2E harness)
+node_modules/

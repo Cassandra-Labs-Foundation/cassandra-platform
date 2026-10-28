@@ -36,3 +36,8 @@ jobs:
 
       - name: Architecture sources still match the reviewed snapshot
         run: python3 scripts/check_architecture.py
+
+      - name: Architecture inventory is current
+        run: |
+          python3 -m pip install pyyaml
+          python3 scripts/gen_architecture.py --check

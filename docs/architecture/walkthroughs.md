@@ -1,6 +1,6 @@
 # Control and derivation walkthroughs
 
-The old static walkthroughs have been replaced by inspectable diagrams:
+The old static walkthroughs have been replaced by inspectable diagrams. Every policy and control is browsable from [Policies & controls](https://cassandra-labs-foundation.github.io/cassandra-platform/architecture/#/policy); two paths are traced by hand:
 
 - [BSA-06: transaction monitoring and case management](https://cassandra-labs-foundation.github.io/cassandra-platform/architecture/#/control). Open a named process, then a decision or action, to reveal implementation mechanics.
 - [Specification and evidence derivation](https://cassandra-labs-foundation.github.io/cassandra-platform/architecture/#/pipeline). Distinguish declared intent, generated contracts and behavioral evidence.

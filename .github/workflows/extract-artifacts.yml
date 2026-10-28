@@ -40,6 +40,10 @@ on:
       - "core/supabase/functions/drill/**"     # drill sources -> drill.json + docs/drill.md
       - "crosswalk-emitted-events.json"        # inventory the drill cross-references
       - "scripts/*.py"       # extractor logic (incl. code_format.py)
+      - "core/supabase/functions/api/*.ts"     # architecture inventory: module headers, imports, handler lines
+      - "core/verifier/flows/*.test.ts"        # architecture inventory: which flows call which paths
+      - "control-tests.json"
+      - "docs/architecture/model.json"         # names the hand-traced control
   # PRs run the full rebuild + every gate but SKIP the commit step, so
   # divergence surfaces on the PR instead of post-merge on main.
   pull_request:
@@ -54,6 +58,10 @@ on:
       - "core/supabase/functions/drill/**"     # drill sources -> drill.json + docs/drill.md
       - "crosswalk-emitted-events.json"        # inventory the drill cross-references
       - "scripts/*.py"
+      - "core/supabase/functions/api/*.ts"
+      - "core/verifier/flows/*.test.ts"
+      - "control-tests.json"
+      - "docs/architecture/model.json"
   workflow_dispatch: {}      # manual full rebuild
 
 permissions:
@@ -113,7 +121,8 @@ jobs:
                 core/verifier/targets.json core/verifier/worklist.md
                 core/core-api.yaml core/supabase/functions/api/routes.gen.ts
                 ui/src/lib/coreApi.allowlist.json ui/src/lib/core-api-types.d.ts
-                drill.json docs/drill.md docs/proposed-surface.md"
+                drill.json docs/drill.md docs/proposed-surface.md
+                docs/architecture/system.json"
           git add -- $arts
 
           if git diff --cached --quiet; then

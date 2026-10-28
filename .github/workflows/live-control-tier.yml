@@ -76,11 +76,12 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: deno run --allow-all core/supabase/functions/drill/controls_live_run.ts
 
-      - name: Regenerate STATE.md (live numbers changed with the baseline)
+      - name: Regenerate STATE.md and the architecture inventory (live numbers changed with the baseline)
         if: steps.guard.outputs.run == 'true' && inputs.mode == 'refresh'
         run: |
           python3 -m pip install pyyaml
           python3 scripts/gen_state.py
+          python3 scripts/gen_architecture.py
 
       - name: Commit refreshed baseline
         if: steps.guard.outputs.run == 'true' && inputs.mode == 'refresh'
@@ -89,7 +90,7 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add control-tests-live.json STATE.md
+          git add control-tests-live.json STATE.md docs/architecture/system.json
           if git diff --cached --quiet; then
             echo "Baseline already current — nothing to commit."
             exit 0

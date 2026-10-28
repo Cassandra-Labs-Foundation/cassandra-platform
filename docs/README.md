@@ -2,7 +2,7 @@
 
 | file | what it is |
 |---|---|
-| [architecture/](architecture/README.md) | interactive backend and control architecture: open components, processes and decisions to inspect their implementation — hosted at <https://cassandra-labs-foundation.github.io/cassandra-platform/architecture/> with a reviewed source model |
+| [architecture/](architecture/README.md) | interactive map of the whole backend and control catalogue — every deployable, module, operation, policy and control, generated from the spec and artifacts, plus a hand-traced BSA-06 path down to its decisions — hosted at <https://cassandra-labs-foundation.github.io/cassandra-platform/architecture/> |
 | [demo-runbook.md](demo-runbook.md) | how to run the live demo, and what to say in the room |
 | [drill.md](drill.md) | the synthetic-institution drill record — and why a drill is not coverage |
 | [proposed-surface.md](proposed-surface.md) | generated inventory of `x-proposed-paths` — the designed-but-unimplemented API, grouped by resource with the verifier's demand signals |

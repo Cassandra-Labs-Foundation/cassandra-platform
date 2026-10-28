@@ -1,4 +1,5 @@
 {
+  "control": "bsa:BSA-06",
   "nodes": {
     "velocity": {
       "stage": "detect",
@@ -436,7 +437,7 @@
       "core/supabase/functions/api/wires.ts": "c4b23848a78c82f5a45a4f8d642a2cc7c987208aaae83cf8021f979ea17a52e0",
       "core/supabase/functions/api/cards.ts": "8aa99996cd74671a89a59878e295f4c290cb4cf6d06b04d781c9df64b07a9c69",
       "core/supabase/functions/api/cda.ts": "1b9c725c7e39949e409a3204d92fa0f3cc4084a5bd942939d746528d6f7d9e0a",
-      "scripts/rebuild_artifacts.sh": "35f73afe052fef60086e626038e9a2616a11022c164277799da19adcea304d32"
+      "scripts/rebuild_artifacts.sh": "ddb8a039bbccc4a489d4d4dd1af00527c4eb354153394f8018614a6091568a42"
     }
   }
 }

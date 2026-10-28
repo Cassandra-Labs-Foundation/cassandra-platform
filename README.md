@@ -32,8 +32,8 @@ ui/             the staff console (Next.js) — live core data via a
 
 analytics/      DuckDB views, the 5300 and BSA reporters
 scripts/        repo-wide tooling: extractors, checkers, generators
-docs/           architecture/ (the C4-style tour — start there if you are
-                new), the demo runbook, the drill record, and docs/history/
+docs/           architecture/ (the interactive map of every module, operation,
+                policy and control — start there if you are new), the demo runbook, the drill record, and docs/history/
                 (dated snapshots kept for the narrative, not the numbers)
 ```
 
