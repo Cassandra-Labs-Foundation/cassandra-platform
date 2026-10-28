@@ -466,7 +466,7 @@ export function apiFlow(sys,traced,eng=false){
 export function pipelineFlow(sys,eng=false){
  const {steps,workflows}=sys;
  const S=s=>({id:'st:'+s.script,kind:s.gate?'Gate · fails the build':'Derivation',title:s.script.split('/').pop(),sub:s.outputs.length?'→ '+s.outputs.join(', '):s.note||first(s.about),href:'#/step/'+enc(s.script),tone:s.gate?'decision':'',tech:`rebuild_artifacts.sh:${s.shLine}`});
- const rows=[];for(let i=0;i<steps.length;i+=3)rows.push([{label:i===0?'scripts/rebuild_artifacts.sh · in run order':'',nodes:steps.slice(i,i+3).map(S)}]);
+ const inner=[];for(let i=0;i<steps.length;i+=3)inner.push([{nodes:steps.slice(i,i+3).map(S)}]);const rows=[{frame:'scripts/rebuild_artifacts.sh · in run order',rows:inner}];
  const wf=Object.keys(workflows).filter(w=>workflows[w].runs.some(r=>r==='scripts/rebuild_artifacts.sh'||steps.some(s=>s.script===r)));
  return diagram({label:'Specification pipeline',rows:[
   [{nodes:[{id:'spec',tone:'port',title:'core/core-api.yaml',sub:'the canonical spec'},{id:'pol',tone:'port',title:'compliance/policies',sub:'the policy text',href:'#/policy'}]}],

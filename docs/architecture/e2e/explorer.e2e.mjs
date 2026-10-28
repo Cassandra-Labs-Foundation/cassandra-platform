@@ -231,6 +231,27 @@ test('a drawn edge never passes through a box it does not connect', async () => 
   }
 });
 
+test('a diagram stays legible at rest: no unconnected box, and row-skipping edges appear on hover', async () => {
+  for (const hash of EVERY_VIEW) {
+    await open(hash);
+    const lonely = await map().evaluate(el => {
+      const d = el.querySelector('[data-diagram]'), shown = new Set();
+      for (const p of d.querySelectorAll('path.dedge:not(.long)')) { shown.add(p.dataset.from); shown.add(p.dataset.to); }
+      const touched = new Set(JSON.parse(d.dataset.edges).flatMap(e => [e.from, e.to]));
+      const inFrame = n => [...shown].some(id => n.closest(`[data-dgroup="${CSS.escape(id)}"]`));
+      return [...d.querySelectorAll('.dnode')].filter(n => touched.has(n.dataset.dnode) && !shown.has(n.dataset.dnode) && !inFrame(n)).map(n => n.dataset.dnode);
+    });
+    assert.deepEqual(lonely, [], `${hash}: boxes whose only edges are hidden at rest`);
+  }
+  await open('#/overview');
+  const hidden = await map().locator('path.dedge.long').count();
+  assert.ok(hidden > 0, 'the overview defers its row-skipping edges');
+  const from = await map().locator('path.dedge.long').first().getAttribute('data-from');
+  await map().locator(`[data-dnode="${from}"]`).first().hover();
+  assert.ok(await map().locator('path.dedge.long.on').count() > 0, 'pointing at a box reveals its hidden edges');
+  await page.mouse.move(0, 0);
+});
+
 test('Engineering detail changes every view, adding identifiers to the boxes', async () => {
   for (const hash of EVERY_VIEW) {
     await toggle(false);

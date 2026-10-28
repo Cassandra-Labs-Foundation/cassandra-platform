@@ -59,7 +59,7 @@ function railsDiagram(eng){
 }
 function tracedDiagram(eng){
  const g=id=>({id,kind:'Process inside BSA-06',title:groups[id].title,sub:groups[id].sub,open:{'data-open-group':id},tone:'traced',tech:Object.keys(nodes).filter(n=>nodes[n].stage===id).join(' · ')});
- return diagram({label:'BSA-06 traced path',rows:[[{nodes:[{id:'in',tone:'port',title:'Movement reaching the payment gate'}]}],...['detect','triage','decide'].map((id,i)=>[{label:i===0?'BSA-06 · traced implementation path':'',nodes:[g(id)]}]),[{nodes:[{id:'out',tone:'port',title:'Recorded SAR / no-SAR decision'}]}]],
+ return diagram({label:'BSA-06 traced path',rows:[[{nodes:[{id:'in',tone:'port',title:'Movement reaching the payment gate'}]}],{frame:'BSA-06 · traced implementation path',rows:['detect','triage','decide'].map(id=>[{nodes:[g(id)]}])},[{nodes:[{id:'out',tone:'port',title:'Recorded SAR / no-SAR decision'}]}]],
   edges:[{from:'in',to:'detect'},{from:'detect',to:'triage',label:'open alert'},{from:'triage',to:'decide',label:'escalated investigation'},{from:'decide',to:'out'}]},eng);
 }
 const block=(id,current)=>{const n=nodes[id];return {id,kind:n.kind,title:n.title,sub:n.sub,tech:n.tech,open:{'data-open-node':id},tone:[['Rule','Human decision'].includes(n.kind)?'decision':'',n.kind==='Exit'?'exit':'',id===current?'current':''].filter(Boolean).join(' ')};};
@@ -70,11 +70,11 @@ const shapes={
  decide:{rows:[['officer'],['decision'],['file','nofile']],out:['file','nofile'],edges:[['officer','decision','Authorized, eligible case'],['decision','file','File'],['decision','nofile','Do not file']]},
 };
 function groupDiagram(gid,current,eng){const s=shapes[gid];
- return diagram({label:groups[gid].title,rows:[[{nodes:[{id:'in',tone:'port',title:'Input · '+groups[gid].input}]}],...s.rows.map((row,i)=>[{label:i===0?groups[gid].title:'',nodes:row.map(id=>block(id,current))}]),[{nodes:[{id:'out',tone:'port',title:'Output · '+groups[gid].output}]}]],
+ return diagram({label:groups[gid].title,rows:[[{nodes:[{id:'in',tone:'port',title:'Input · '+groups[gid].input}]}],{frame:groups[gid].title,rows:s.rows.map(row=>[{nodes:row.map(id=>block(id,current))}])},[{nodes:[{id:'out',tone:'port',title:'Output · '+groups[gid].output}]}]],
   edges:[{from:'in',to:s.rows[0][0]},...s.edges.map(([a,b,label])=>({from:a,to:b,label})),...s.out.map(id=>({from:id,to:'out'}))]},eng);
 }
 function nodeDiagram(id,eng){const n=nodes[id],steps=internals[id];
- return diagram({label:n.title,rows:[[{nodes:[{id:'parent',tone:'port',title:'Inside '+groups[n.stage].title,sub:'the enclosing process'}]}],...steps.map(([name,detail],i)=>[{label:i===0?n.tech:'',nodes:[{id:'i'+i,kind:'Implementation',title:name,sub:detail,tone:i===steps.length-1?'current':''}]}]),[{nodes:[{id:'src',kind:'Source',title:at(n.file,n.line),sub:'the code behind this boundary',tech:n.contract,...ext(n.file,n.line)}]}]],
+ return diagram({label:n.title,rows:[[{nodes:[{id:'parent',tone:'port',title:'Inside '+groups[n.stage].title,sub:'the enclosing process'}]}],{frame:n.tech,rows:steps.map(([name,detail],i)=>[{nodes:[{id:'i'+i,kind:'Implementation',title:name,sub:detail,tone:i===steps.length-1?'current':''}]}])},[{nodes:[{id:'src',kind:'Source',title:at(n.file,n.line),sub:'the code behind this boundary',tech:n.contract,...ext(n.file,n.line)}]}]],
   edges:[{from:'parent',to:'i0'},...steps.slice(1).map((_,i)=>({from:'i'+i,to:'i'+(i+1),label:'then'})),{from:'i'+(steps.length-1),to:'src',label:'implemented at',style:'dotted'}]},eng);
 }
 function renderViewInspector(view){const contract=state.engineering?`<div class="technical"><div class="eyebrow">Implementation contract</div><p>${view.sources.map(([f,l,t])=>`<b>${esc(t)}</b> <code>${esc(f)}:${l}</code>`).join('<br>')}</p></div>`:'';return `<div class="eyebrow">${view.scope}</div><h3>${view.intro}</h3><div class="section"><div class="eyebrow">Implementation</div><p>${view.meaning}</p></div><div class="check"><div class="eyebrow">Scope & review boundary</div><p>${view.limit}</p></div>${contract}<div class="sources">${view.sources.map(([file,line,title])=>link(file,line,title)).join('')}</div>`;}
