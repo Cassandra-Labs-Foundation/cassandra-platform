@@ -256,6 +256,27 @@ test('a diagram stays legible at rest: no unconnected box, and row-skipping edge
   await page.mouse.move(0, 0);
 });
 
+test('the traced control states what its code does next to the policy, including where they differ', async () => {
+  await open('#/control/bsa:BSA-06');
+  const frame = map().locator('[data-dgroup="c:bsa:BSA-06"]');
+  const inside = await frame.innerText(), side = await page.locator('[data-inspector]').innerText();
+  for (const fact of ['$25,000', '$10,000', '30 days', 'alert was created', 'BSA Officer', 'opened the case']) {
+    assert.ok(inside.includes(fact), `the process boxes say: ${fact}`);
+    assert.ok(side.includes(fact), `the inspector says: ${fact}`);
+  }
+  assert.match(side, /Where the policy and the code differ[\s\S]*not enforc|without enforcing/i);
+});
+
+test('no view is a scroll of listings: every page stays within the height budget', async () => {
+  const BUDGET = 4000;
+  for (const hash of EVERY_VIEW) {
+    await open(hash);
+    await map().locator('[data-diagram]').first().waitFor();
+    const h = await page.locator('.workspace').evaluate(el => el.getBoundingClientRect().height);
+    assert.ok(h <= BUDGET, `${hash} is ${Math.round(h)}px tall (budget ${BUDGET})`);
+  }
+});
+
 test('Engineering detail changes every view, adding identifiers to the boxes', async () => {
   for (const hash of EVERY_VIEW) {
     await toggle(false);

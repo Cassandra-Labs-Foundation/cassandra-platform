@@ -15,4 +15,4 @@ For grading only. The blind reader never sees this file. Each answer is taken fr
 | 9 | In the Blnk ledger. The Blnk webhook and the reconciler mirror changes back into the core. | Overview; Blnk ledger |
 | 10 | Yes: green in both the hermetic tier (fake database) and the live tier (the real core). | Control BSA-06 |
 | 11 | No. The generated inventory states declared facts and static references; the traced path is a human-reviewed interpretation at one revision. Neither is a compliance verdict. | Overview inspector; "How this map is made" |
-| 12 | Policies & controls → the BSA policy → BSA-06 → Large-movement detection → "Movement greater than $10,000?". | Breadcrumbs on the traced views |
+| 12 | Any sequence of boxes that the pages show linking each to the next and that ends at "Movement greater than $10,000?". The shortest is Policies & controls → the BSA policy → BSA-06 → Large-movement detection → the rule; going through the Core API, the Payments domain and `transfers.ts` to BSA-06 is equally correct. | Breadcrumbs on the traced views; the module and control diagrams |

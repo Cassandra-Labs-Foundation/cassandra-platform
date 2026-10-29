@@ -203,21 +203,24 @@
       "sub": "Payment gate · threshold · alert creation",
       "input": "Movement that reaches runGate",
       "output": "An open monitoring alert",
-      "selected": "threshold"
+      "selected": "threshold",
+      "summary": "Over $25,000 in a day across the four rails is blocked; a single movement over $10,000 opens an alert for review without stopping it."
     },
     "triage": {
       "title": "Alert triage & investigation",
       "sub": "Investigator access · resolve · open case",
       "input": "An open monitoring alert",
       "output": "Closed alert or an investigation",
-      "selected": "triage"
+      "selected": "triage",
+      "summary": "An investigator closes the alert with a note or escalates it to a case, which has 30 days to a decision (60 with no suspect), counted from when the alert was created."
     },
     "decide": {
       "title": "SAR decision & record",
       "sub": "Officer authorization · decision · evidence",
       "input": "An investigation",
       "output": "A recorded SAR or no-SAR decision",
-      "selected": "decision"
+      "selected": "decision",
+      "summary": "Only the BSA Officer role decides, and never the officer who opened the case; committee concurrence is recorded, not enforced."
     }
   },
   "internals": {
@@ -439,5 +442,6 @@
       "core/supabase/functions/api/cda.ts": "1b9c725c7e39949e409a3204d92fa0f3cc4084a5bd942939d746528d6f7d9e0a",
       "scripts/rebuild_artifacts.sh": "ddb8a039bbccc4a489d4d4dd1af00527c4eb354153394f8018614a6091568a42"
     }
-  }
+  },
+  "gap": "The policy calls for committee review of each SAR decision. The traced code requires one BSA Officer and records the committee’s concurrence without enforcing quorum or composition."
 }

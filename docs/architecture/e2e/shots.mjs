@@ -28,7 +28,7 @@ if (!base) {
 const views = ['overview', 'api', 'domain/payments', 'module/transfers', 'op/' + encodeURIComponent('POST /transfers'), 'policy', 'policy/bsa',
   'control/' + encodeURIComponent('bsa:BSA-06'), 'event/bsa_alert.created', 'container/aggregator', 'file/' + encodeURIComponent('aggregator/handler.ts'),
   'container/postgres', 'table/core.account', 'machine/Account', 'container/ui', 'page/compliance.jsx', 'container/blnk', 'container/_shared',
-  'container/analytics', 'pipeline', 'step/' + encodeURIComponent('scripts/gen_architecture.py'), 'process/detect', 'implementation/threshold', 'routing', 'rails'];
+  'container/analytics', 'pipeline', 'step/' + encodeURIComponent('scripts/gen_architecture.py'), 'process/detect', 'process/triage', 'process/decide', 'implementation/threshold', 'routing', 'rails'];
 const browser = await chromium.launch();
 const page = await browser.newPage({viewport: {width: 1280, height: 900}});
 const errors = [], scores = [];

@@ -17,7 +17,7 @@ fetch('./stale.json').then(r=>r.ok?r.json():null).then(s=>{if(s?.changed?.length
 function staleBar(traced){const el=root.querySelector('[data-stale]');el.hidden=!(traced&&stale);
  if(traced&&stale)el.innerHTML=`<b>The code behind this traced path changed after it was reviewed.</b> It was read at <code>${esc(stale.revision.slice(0,7))}</code>; since then ${stale.changed.map(f=>`<code>${esc(f.split('/').pop())}</code>`).join(', ')} changed, so its claims may be out of date until it is traced again. The generated inventory is current.`;}
 // BSA-06's control page draws its traced processes inside the control's own box.
-const inv=inventory(sys,{processes:['detect','triage','decide'].map(id=>({id,kind:'Process · traced by hand',title:groups[id].title,sub:groups[id].sub,tech:Object.keys(nodes).filter(n=>nodes[n].stage===id).join(' · ')})),
+const inv=inventory(sys,{gap:model.gap,processes:['detect','triage','decide'].map(id=>({id,kind:'Process · traced by hand',title:groups[id].title,sub:groups[id].summary||groups[id].sub,tech:Object.keys(nodes).filter(n=>nodes[n].stage===id).join(' · ')})),
  edges:[{from:'detect',to:'triage',label:'open alert'},{from:'triage',to:'decide',label:'escalated investigation'}]});
 const tracedControl=sys.controls[model.control];
 const base='https://github.com/Cassandra-Labs-Foundation/cassandra-platform/blob/'+snapshot.revision+'/';
