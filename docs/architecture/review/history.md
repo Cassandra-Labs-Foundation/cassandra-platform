@@ -6,3 +6,4 @@ One row per weekly review, appended by `.github/workflows/architecture-review.ym
 |---|---|---|---|---|
 | 2026-10-28 | fb65fba | 10/12 | 4,5,12 | container/postgres · 23120px |
 | 2026-11-02 | 776c53b | 12/12 | none | table/core.account · 3551px |
+| 2026-11-09 | 439d331 | 12/12 | none | table/core.account · 3551px |
