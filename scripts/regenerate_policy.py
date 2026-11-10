@@ -3,8 +3,9 @@
 
 Why raw API: policy-prep already assembles a self-contained composite prompt,
 so generation is a pure completion, not an agent task. Calling the API directly
-is faster (no CLI/agent-loop overhead), cheaper (prompt caching on the shared
-meta-prompt), and deterministic.
+is faster (no CLI/agent-loop overhead) and cheaper (prompt caching on the shared
+meta-prompt). Output is not deterministic: current models sample only with the
+default settings, so every regeneration lands as a pull request for review.
 
 Document-reading optimization is preserved by REUSING policy-prep's functions
 in-process — the same durable, content-hashed reference conversions and parallel
@@ -20,7 +21,8 @@ Per slug this script:
 
 Usage:
   ANTHROPIC_API_KEY=... python3 scripts/regenerate_policy.py <slug> \
-      [--model claude-sonnet-4-6] [--max-tokens 32000] [--project-root DIR]
+      [--model claude-opus-5-5] [--effort high] [--max-tokens 64000]
+      [--project-root DIR]
 """
 
 from __future__ import annotations
@@ -44,13 +46,28 @@ def log(msg: str) -> None:
 
 
 def generate(client: anthropic.Anthropic, *, model: str, max_tokens: int,
-             temperature: float, system_text: str, user_text: str) -> str:
-    """One cached completion. system_text is the stable, cache-marked prefix."""
-    out: list[str] = []
-    with client.messages.stream(
+             effort: str, system_text: str, user_text: str) -> tuple[str, str]:
+    """One cached completion. system_text is the stable, cache-marked prefix.
+
+    Returns (policy_text, served_by_model).
+
+    No temperature/top_p/top_k: current SDKs and API versions reject them, and
+    current models sample only with the defaults. Thinking is always on for
+    Claude Opus 5.5; `effort` is the quality/cost control (its default there is
+    "medium", so it is set explicitly).
+
+    `fallbacks: "default"` lets the API re-run a request that a safety
+    classifier declines on Anthropic's recommended fallback model, inside the
+    same call. On a mid-stream fallback the partial text is kept and the
+    fallback model continues from it, so joining every text block in order
+    yields the whole document; thinking/fallback blocks are skipped.
+    """
+    with client.beta.messages.stream(
         model=model,
         max_tokens=max_tokens,
-        temperature=temperature,
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+        output_config={"effort": effort},
         system=[{
             "type": "text",
             "text": system_text,
@@ -58,18 +75,32 @@ def generate(client: anthropic.Anthropic, *, model: str, max_tokens: int,
         }],
         messages=[{"role": "user", "content": user_text}],
     ) as stream:
-        for chunk in stream.text_stream:
-            out.append(chunk)
         final = stream.get_final_message()
     u = final.usage
     log(f"    usage: in={u.input_tokens} out={u.output_tokens} "
         f"cache_write={getattr(u, 'cache_creation_input_tokens', 0)} "
         f"cache_read={getattr(u, 'cache_read_input_tokens', 0)}")
+    for block in final.content:
+        if block.type == "fallback":
+            log(f"    fallback: {block.from_.model} declined; {block.to.model} continued")
+    if final.stop_reason == "refusal":
+        details = getattr(final, "stop_details", None)
+        raise RuntimeError(
+            f"the model (and its fallbacks) declined to write this policy: "
+            f"category={getattr(details, 'category', None)} "
+            f"explanation={getattr(details, 'explanation', None)}")
     if final.stop_reason == "max_tokens":
         raise RuntimeError(
             f"output hit max_tokens ({max_tokens}) — policy was truncated. "
             f"Raise --max-tokens and re-run.")
-    return "".join(out)
+    if final.stop_reason != "end_turn":
+        # e.g. model_context_window_exceeded: anything but a normal finish may
+        # be a cut-off policy, which must never be written.
+        raise RuntimeError(f"generation did not finish normally (stop_reason={final.stop_reason})")
+    text = "".join(b.text for b in final.content if b.type == "text")
+    if not text.strip():
+        raise RuntimeError(f"empty response (stop_reason={final.stop_reason})")
+    return text, final.model
 
 
 def inputs_block(meta_prompt: str, inputs, reference_policy: str) -> str:
@@ -101,9 +132,11 @@ def write_status(status_path: Path, *, policy_name: str, slug: str, model: str,
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("slug")
-    ap.add_argument("--model", default="claude-sonnet-4-6")
-    ap.add_argument("--max-tokens", type=int, default=32000)
-    ap.add_argument("--temperature", type=float, default=0.0)
+    ap.add_argument("--model", default="claude-opus-5-5")
+    ap.add_argument("--effort", default="high",
+                    choices=["low", "medium", "high", "xhigh", "max"])
+    # Thinking counts toward max_tokens, so leave room beyond the policy itself.
+    ap.add_argument("--max-tokens", type=int, default=64000)
     ap.add_argument("--project-root", type=Path, default=None)
     args = ap.parse_args()
 
@@ -148,9 +181,9 @@ def main() -> int:
 
     # --- 2. Structured policy --------------------------------------------------
     log(f"[{slug}] generating structured policy ({args.model})…")
-    structured = generate(
+    structured, served_by = generate(
         client, model=args.model, max_tokens=args.max_tokens,
-        temperature=args.temperature,
+        effort=args.effort,
         system_text=meta_prompt,                      # cached, shared across policies
         user_text=inputs_block(meta_prompt, inputs, reference_policy),
     )
@@ -162,7 +195,7 @@ def main() -> int:
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     write_status(
         folder / f"{slug}.status.md", policy_name=inputs.policy_name, slug=slug,
-        model=args.model, design_notes_source=inputs.design_notes_source,
+        model=served_by, design_notes_source=inputs.design_notes_source,
         skipped=", ".join(skipped_parts), ref_stats=ref_stats, ts=ts)
     log(f"[{slug}] wrote {slug}/{slug}.status.md")
     log(f"[{slug}] done.")
@@ -171,6 +204,7 @@ def main() -> int:
         "slug": slug,
         "policy_name": inputs.policy_name,
         "structured_chars": len(structured),
+        "model": served_by,
         "design_notes_source": inputs.design_notes_source,
         "references": ref_stats,
     }))
