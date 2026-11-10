@@ -29,7 +29,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-01 — Governance & Board Oversight {#cda-01-governance-board-oversight}
 
-**WHY (Reg cite):** A CDA is permissible only as an exercise of FCU incidental powers under [12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2)); Board adoption, structure/vendor/strategy approval, and ongoing oversight are how the credit union demonstrates the conditions are met and Part 703 relief is properly claimed.
+**WHY (Reg cite):** A CDA is permissible only as an exercise of FCU incidental powers under [12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2)); Board adoption, structure/vendor/strategy approval, and ongoing oversight are how the credit union demonstrates the conditions are met and Part 703 relief is properly claimed.
 
 **SYSTEM BEHAVIOR:** The Board adopts and annually re-adopts this policy and approves CDA structures, vendors, strategy/limits, and distributions. A quarterly Board/ALCO packet summarizing cap utilization, performance, five-year window coverage, and exceptions is compiled and issued within 30 days of quarter-end. If the policy lapses, all CDA actions (funding, trades, distributions) are blocked until re-adoption is recorded. Policy version, expiry, and the readoption flag are write-restricted to Compliance.
 
@@ -45,7 +45,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-02 — Definitions & Central Glossary {#cda-02-definitions-central-glossary}
 
-**WHY (Reg cite):** §721.3(b)(2) defines the operative terms—Qualified Charity, Total Return, Affiliate—on which the cap, distribution, and fee conditions depend ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); consistent definitions drive correct validations and calculations.
+**WHY (Reg cite):** §721.3(b)(2) defines the operative terms—Qualified Charity, Total Return, Affiliate—on which the cap, distribution, and fee conditions depend ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); consistent definitions drive correct validations and calculations.
 
 **SYSTEM BEHAVIOR:** A central glossary maintains canonical definitions for CDA, Qualified Charity, Total Return, Distribution in Kind, Affiliate, Net Worth, and Book Value, each with a regulatory citation and version. These definitions power downstream validations (charity eligibility, fee screening) and calculations (cap test, distribution percentage). Glossary changes are proposed, attested, and versioned; the glossary term set and version are write-restricted to Compliance.
 
@@ -59,7 +59,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-03 — Structure & Segregation {#cda-03-structure-segregation}
 
-**WHY (Reg cite):** §721.3(b)(2)(i) requires the CDA to be a segregated account or held by a regulated trustee/manager and properly designated as a charitable donation account ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); mislabeling or commingling forfeits the safe harbor.
+**WHY (Reg cite):** §721.3(b)(2)(i) requires the CDA to be a segregated account or held by a regulated trustee/manager and properly designated as a charitable donation account ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); mislabeling or commingling forfeits the safe harbor.
 
 **SYSTEM BEHAVIOR:** Before first funding, the credit union selects the CDA structure (segregated custodial account or SPE/trust), labels it "Charitable Donation Account," and assembles an evidence packet (structure selection, account label, custodial statement). Funding is gated until the evidence packet is filed and the structure is confirmed. Structure type and account label are write-restricted to Compliance.
 
@@ -73,7 +73,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-04 — Trustee & Manager Qualification {#cda-04-trustee-manager-qualification}
 
-**WHY (Reg cite):** §721.3(b)(2)(ii) limits trustees/managers to regulated trustees and, for non-CU discretionary managers, SEC-registered investment advisers or OCC-regulated entities ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); a registration lapse jeopardizes the relief.
+**WHY (Reg cite):** §721.3(b)(2)(ii) limits trustees/managers to regulated trustees and, for non-CU discretionary managers, SEC-registered investment advisers or OCC-regulated entities ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); a registration lapse jeopardizes the relief.
 
 **SYSTEM BEHAVIOR:** Only regulated trustees and qualified non-CU discretionary managers (SEC-registered investment adviser or OCC-regulated) are onboarded; qualification is validated at onboarding and reviewed annually using registration evidence. A detected registration lapse is escalated to the Board within 2 business days. Vendor qualification status and registration evidence are write-restricted to Compliance.
 
@@ -89,7 +89,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-05 — Written Agreement (Required Clauses A–D) {#cda-05-written-agreement-required-clauses}
 
-**WHY (Reg cite):** §721.3(b)(2)(v) and the agreement conditions require the CDA written agreement to name Qualified Charities, state investment strategy/risk, require GAAP accounting, and set distribution frequency ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); a missing clause breaks the safe harbor.
+**WHY (Reg cite):** §721.3(b)(2)(v) and the agreement conditions require the CDA written agreement to name Qualified Charities, state investment strategy/risk, require GAAP accounting, and set distribution frequency ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); a missing clause breaks the safe harbor.
 
 **SYSTEM BEHAVIOR:** Funding is blocked unless the written agreement is validated to contain clause (A) named Qualified Charities, clause (B) investment strategy/risk, clause (C) GAAP accounting requirement, and clause (D) distribution frequency per §721.3(b)(2)(v). Agreement amendments require Board re-approval before taking effect. Agreement clause fields and the validated flag are write-restricted to Compliance.
 
@@ -104,7 +104,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-06 — Funding Cap (Monitoring & Cure) {#cda-06-funding-cap-monitoring-cure}
 
-**WHY (Reg cite):** §721.3(b)(2)(iii) caps aggregate CDA book value at no more than 5% of net worth and provides a cure period for breaches ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); exceeding the cap without timely cure forfeits Part 703 relief.
+**WHY (Reg cite):** §721.3(b)(2)(iii) caps aggregate CDA book value at no more than 5% of net worth and provides a cure period for breaches ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); exceeding the cap without timely cure forfeits Part 703 relief.
 
 **SYSTEM BEHAVIOR:** Aggregate CDA book value is held at no more than 5% of net worth with a default internal buffer of 4%. Cap tests run monthly and at quarter-end; a projected breach blocks new funding, and any actual breach is cured within 30 calendar days via a tracked cure plan. Cap buffer, excess amount, and cure status are write-restricted to Compliance.
 
@@ -120,7 +120,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-07 — Investment Strategy & Risk Limits {#cda-07-investment-strategy-risk-limits}
 
-**WHY (Reg cite):** Although [12 CFR Part 703](https://www.ecfr.gov/current/title-12/part-703) limits do not apply to a compliant CDA per §721.3(b)(2), the Board applies prudent overlays as required by the agreement's strategy/risk clause under [12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2)) and safe-and-sound governance.
+**WHY (Reg cite):** Although [12 CFR Part 703](https://www.ecfr.gov/current/title-12/part-703) limits do not apply to a compliant CDA per §721.3(b)(2), the Board applies prudent overlays as required by the agreement's strategy/risk clause under [12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2)) and safe-and-sound governance.
 
 **SYSTEM BEHAVIOR:** Board-approved prudent overlays (single-issuer, sector, liquidity, volatility, drawdown) apply even though Part 703 limits do not. A pre-trade check evaluates each proposed trade against the overlays, and a monthly post-trade check confirms continued compliance. Overlay limits and strategy parameters are write-restricted to Compliance.
 
@@ -135,7 +135,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-08 — Charity Eligibility & Giving Rules {#cda-08-charity-eligibility-giving-rules}
 
-**WHY (Reg cite):** §721.3(b)(2)(iv)–(v) require distributions only to Qualified Charities and at least 51% of Total Return at least every five years and at termination ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); a Qualified Charity is defined by [26 U.S.C. §501(c)(3)](https://www.law.cornell.edu/uscode/text/26/501) (and (c)(19) where applicable).
+**WHY (Reg cite):** §721.3(b)(2)(iv)–(v) require distributions only to Qualified Charities and at least 51% of Total Return at least every five years and at termination ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); a Qualified Charity is defined by [26 U.S.C. §501(c)(3)](https://www.law.cornell.edu/uscode/text/26/501) (and (c)(19) where applicable).
 
 **SYSTEM BEHAVIOR:** Each donee's EIN and IRS §501(c)(3)/(c)(19) status are validated before distribution, and the rolling five-year window is tracked. At least 51% of Total Return is distributed to Qualified Charities at least every five years and at termination, with a default annual cadence by December 31. A distribution to an unvalidated donee is blocked. Donee validation status and window coverage are write-restricted to Compliance.
 
@@ -150,7 +150,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-09 — Accounting, Reporting & Records {#cda-09-accounting-reporting-records}
 
-**WHY (Reg cite):** §721.3(b)(2) requires GAAP accounting for the CDA under the written agreement ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); accurate books and Call Report mapping support the cap test and Total Return calculation.
+**WHY (Reg cite):** §721.3(b)(2) requires GAAP accounting for the CDA under the written agreement ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); accurate books and Call Report mapping support the cap test and Total Return calculation.
 
 **SYSTEM BEHAVIOR:** GAAP entries are enforced, monthly reconciliations are performed, and Call Report Account 789H mapping is maintained. The quarterly Board/ALCO accounting packet is issued within 30 days of quarter-end. GL balances, reconciliation status, and the 789H mapping are write-restricted to Compliance and Finance.
 
@@ -166,7 +166,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-10 — Third-Party Risk Management {#cda-10-third-party-risk-management}
 
-**WHY (Reg cite):** §721.3(b)(2)(ii) requires CDA trustees/managers to remain qualified throughout the engagement ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); CDA-specific life-cycle diligence preserves that qualification and the integrity of the segregated assets.
+**WHY (Reg cite):** §721.3(b)(2)(ii) requires CDA trustees/managers to remain qualified throughout the engagement ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); CDA-specific life-cycle diligence preserves that qualification and the integrity of the segregated assets.
 
 **SYSTEM BEHAVIOR:** Life-cycle CDA-specific due diligence runs on trustees/managers covering regulatory status, financials, SOC/ISO, BCP/DR, and fees/conflicts, with annual review. Contracts require a 90-day termination provision and asset-transfer steps. Material issues are escalated within 2 business days. Vendor due-diligence file and contract-validation flags are write-restricted to Compliance. (CDA-specific diligence only; enterprise vendor management lives in the Third-Party Risk Policy.)
 
@@ -182,7 +182,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-11 — Internal Controls & Testing {#cda-11-internal-controls-testing}
 
-**WHY (Reg cite):** Sustained compliance with the §721.3(b)(2) conditions—cap, distribution cadence, and fee prohibition—depends on dual control, segregation of duties, and independent testing ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))).
+**WHY (Reg cite):** Sustained compliance with the §721.3(b)(2) conditions—cap, distribution cadence, and fee prohibition—depends on dual control, segregation of duties, and independent testing ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))).
 
 **SYSTEM BEHAVIOR:** Distributions at or above $5,000 require dual approval; segregation of duties is enforced; automated cap checks run continuously; valuation reviews occur quarterly; and Internal Audit tests the program annually with tracked remediation. Audit findings and remediation ownership are write-restricted to Compliance and Internal Audit. A distribution below the dual-approval threshold requires single approval but is still logged.
 
@@ -199,7 +199,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-12 — Termination {#cda-12-termination}
 
-**WHY (Reg cite):** §721.3(b)(2)(vi) requires that on termination the CDA satisfy the ≥51% closing distribution and that remaining assets be received in cash or, in kind, only if otherwise permissible FCU investments ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); permissibility of in-kind assets is judged against [12 CFR Part 703](https://www.ecfr.gov/current/title-12/part-703).
+**WHY (Reg cite):** §721.3(b)(2)(vi) requires that on termination the CDA satisfy the ≥51% closing distribution and that remaining assets be received in cash or, in kind, only if otherwise permissible FCU investments ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); permissibility of in-kind assets is judged against [12 CFR Part 703](https://www.ecfr.gov/current/title-12/part-703).
 
 **SYSTEM BEHAVIOR:** At termination, the ≥51% closing distribution is satisfied and remaining assets are received in cash or in-kind only where the in-kind asset is an otherwise permissible FCU investment, determined by a documented permissibility check. A termination report is issued within 30 days post-close. Termination approval, final accounting, and permissibility determination are write-restricted to Compliance. An in-kind transfer of a non-permissible asset is blocked and must be liquidated to cash before receipt.
 
@@ -215,7 +215,7 @@ Pynthia Credit Union establishes and operates Charitable Donation Accounts (CDAs
 
 ## CDA-13 — Conflicts & Affiliate Fees {#cda-13-conflicts-affiliate-fees}
 
-**WHY (Reg cite):** §721.3(b)(2) prohibits payment of CDA fees/expenses to the credit union or its affiliates and defines Affiliate accordingly ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/part-721#p-721.3(b)(2))); such payments distort Total Return and break the safe harbor.
+**WHY (Reg cite):** §721.3(b)(2) prohibits payment of CDA fees/expenses to the credit union or its affiliates and defines Affiliate accordingly ([12 CFR §721.3(b)(2)](https://www.ecfr.gov/current/title-12/section-721.3#p-721.3(b)(2))); such payments distort Total Return and break the safe harbor.
 
 **SYSTEM BEHAVIOR:** Payment of any CDA fee or expense to the credit union or its affiliates is blocked via a payee blocklist, preserving the Total Return definition, with a quarterly fee review. Identified conflicts are escalated within 5 business days. The payee blocklist and conflict determinations are write-restricted to Compliance.
 

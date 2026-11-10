@@ -28,7 +28,9 @@ ANCHORS & LINKING RULES
 - Every control section must be headed with `## <ID> — <Title>` so GitBook auto-generates predictable fragments, e.g.:
   - `## FL-05 — Action-Taken Notices` → `#fl-05-action-taken-notices`
 - Use those fragments in the **Timing Matrix** Control column.
-- For statutes/regs, link to eCFR/LII (e.g., `https://www.ecfr.gov/current/title-12/part-1002#p-1002.9`).
+- For statutes/regs, link to eCFR/LII. Link a section to its own page (e.g., `https://www.ecfr.gov/current/title-12/section-1002.9`) and a paragraph with an anchor on that page (e.g., `https://www.ecfr.gov/current/title-12/section-1002.9#p-1002.9(a)`). Never write `part-1002#p-1002.9`: eCFR has no anchor for a whole section on a Part page, so the link opens at the top of the Part.
+- Cite only rules that exist today. Former OTS rules in 12 CFR Part 563 were recodified by the OCC in 12 CFR Part 163 (e.g., §563.200 → §163.200); they govern federal savings associations, so a credit union policy may adopt them only as an internal standard and must say so.
+- FFIEC IT Examination Handbook booklets live at `https://ithandbook.ffiec.gov/it-booklets/<booklet>/` (e.g., `business-continuity-management`, `information-security`). Do not link `ffiec.gov/press/...` PDFs; most of those paths no longer exist.
 
 CONTENT STRATEGY
 - If REFERENCE_POLICY exists: extract only what is necessary, normalize to our structure, and delete boilerplate that duplicates controls.
