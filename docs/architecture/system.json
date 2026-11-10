@@ -19562,7 +19562,7 @@
    "policy": "director-fiduciary-duties",
    "policyLine": 61,
    "citations": [
-    "12 CFR §563.200",
+    "12 CFR §163.200",
     "12 CFR §701.4"
    ],
    "behavior": "The system screens each Board agenda item against the current conflict register. When a covered person is identified as having an interest in an agenda item, the item is flagged (`board.agenda_item_flagged_conflicted`) before the meeting. Covered persons must not advance personal or related-party interests at the credit union's expense, must disclose all material non-privileged information on any matter in which they have an interest (including the nature and extent of the interest), and must avoid even the appearance of a conflict. The obligation to disclose is continuing — it applies whenever a conflict arises, not only at annual questionnaire time. The conflict register is write-restricte",
@@ -19623,7 +19623,7 @@
    "policyLine": 79,
    "citations": [
     "12 CFR §701.4",
-    "12 CFR §563.200",
+    "12 CFR §163.200",
     "12 CFR §215.8"
    ],
    "behavior": "Each calendar year the system opens an annual COI cycle, issues Exhibit A questionnaires to all directors and executive officers, and tracks completion. Questionnaire responses are stored against the covered person's record. Separately, the CCO compiles the annual insider/related-interest record, circulates it to insiders for review, and retains the reviewed record. Ad-hoc disclosures (Exhibit B) are accepted at any time during the year and are linked to the conflict register. Questionnaire issuance and the insider record compilation are write-restricted to the Chief Compliance Officer.",
@@ -19687,7 +19687,7 @@
    "policy": "director-fiduciary-duties",
    "policyLine": 99,
    "citations": [
-    "12 CFR §563.200",
+    "12 CFR §163.200",
     "12 CFR §701.4"
    ],
    "behavior": "When a conflict is identified on a Board agenda item, the system records the recusal, removes the interested director from the quorum count for that item, and confirms that a disinterested quorum exists before the vote proceeds. The Board may appoint an independent reviewer or committee to investigate alternatives. The interested party may make a presentation before the discussion but must leave before deliberation and vote. The Board's determination — including the basis for approving or rejecting the transaction — is recorded in the minutes. Recusal records and Board determinations are write-restricted to the Board Secretary and the Chief Compliance Officer.",
@@ -19953,7 +19953,7 @@
    "policy": "director-fiduciary-duties",
    "policyLine": 175,
    "citations": [
-    "12 CFR §563.201",
+    "12 CFR §163.201",
     "12 U.S.C. § 1464(q)",
     "12 U.S.C. § 2608"
    ],
