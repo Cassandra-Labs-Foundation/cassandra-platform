@@ -98,3 +98,26 @@ Not done:
 - no E2E harness exists in ui/;
 - **not deployed or live-verified**: needs Lorenzo's OK to commit/push to main (pre-push review), then a Vercel deploy and an independent live check.
 - The dashboard data load sometimes takes 20–45s.
+
+## 2026-11-10: Cassandra look shipped (1ee9bef) and live-verified
+
+Lorenzo approved commit and push. The commit was built in a clean worktree from origin/main, so another session's uncommitted policy/vocabulary edits stayed out.
+
+Pre-push review: candidate 1ee9bef against base 67eb39e.
+- Repo gates (gen_state, doc claims) pass; `next build` passes.
+- A fresh-context verifier passed J1–J6 on a local production build of the exact commit against the live demo core.
+- Verdict UNVERIFIED / NEEDS_PREVIEW, because no deployment of the commit existed.
+
+Lorenzo chose "push to main now" as an explicit exception. Pushed 67eb39e..1ee9bef at 2026-11-10T04:50Z; Vercel Production deployment 7673898988 succeeded.
+- The same verifier replayed J1–J6 on the deployment URL in Chrome (Cassandra profile): all PASS.
+- The alias (now serving bot commit a58b658, generated JSON only) showed identical figures.
+- Impeccable detector on production: 0 findings at 1440/390.
+- Result: live-verified, READY with six Minor findings, owner Lorenzo:
+  - M1: "Healthy" means evidence coverage only (BSA has overdue alerts/CTRs).
+  - M2: the events feed shows look-alike duplicate rows.
+  - M3: nav labels differ from page titles.
+  - M4 (pre-existing): the badge's "live" state rides the sequence clock.
+  - M5 (pre-existing): per-policy event counts double-count shared codes (16,110 vs 9,545).
+  - M6 (pre-existing): bell lacks Escape/aria-expanded; "Back to Teller"; same-name search results.
+
+Still to do: migrate the policy/control pages and other pages' panels to the new tokens; add a primary button style; build an E2E harness; look at the 20–45s dashboard load.
