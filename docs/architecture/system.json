@@ -34680,8 +34680,8 @@
   },
   "compliance/dashboard/index.jsx": {
    "file": "ui/src/pages/compliance/dashboard/index.jsx",
-   "lines": 148,
-   "about": "Compliance monitoring — the overview. Every control in the catalogue has a heartbeat; this page sums them into one pulse, a coverage count (live / silent / never), ledger + delivery health, and a card per policy that drills into that policy's control list. Ported from the standalone dashboard's index view. Data via the UI's core proxy + the static manifest (see lib/useDashboard).",
+   "lines": 410,
+   "about": "Compliance monitoring — the overview. Every control in the catalogue has a heartbeat; this page sums them into one pulse, a coverage count (live / silent / never), ledger + delivery health, a card per policy that drills into that policy's control list, and the newest events across all controls. Data via the UI's core proxy + the static manifest (see lib/useDashboard). Design direction: .impeccable/surfaces/ui-src-pages-compliance-dashboard-index-jsx.md",
    "ops": []
   },
   "compliance.jsx": {
