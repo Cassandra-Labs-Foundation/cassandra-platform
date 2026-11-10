@@ -23,49 +23,46 @@ import { IDLE_AFTER_MS, ago, useNow } from '../../lib/useLiveCore';
  *             honest state for a quiet book, and for seed data that stopped.
  *   no beat — the poll itself is failing. Amber. Different problem entirely.
  */
-export function LiveBadge({ live, polledAt, lastAdvanceAt, error, className = '' }) {
+export function LiveBadge({ live, polledAt, lastAdvanceAt, error, compact = false, className = '' }) {
   const now = useNow();
 
   if (error) {
     return (
-      <span className={`inline-flex items-center text-xs text-amber-700 ${className}`}>
-        <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5 shrink-0" />
-        heartbeat failing — showing last known figures
+      <span className={`inline-flex items-center text-xs text-[#93370d] ${className}`} title="heartbeat failing, showing last known figures">
+        <span className="w-2 h-2 rounded-full bg-silent mr-1.5 shrink-0" aria-hidden="true" />
+        {compact ? 'no beat' : 'heartbeat failing, showing last known figures'}
       </span>
     );
   }
 
-  // The event clock, not the poll clock: how long since the CORE last moved.
+  // The ledger clock, not the poll clock: how long since the core's position
+  // last moved. Labeled "ledger" because other surfaces (e.g. drill events in
+  // the monitoring feed) run on their own clocks.
   const eventMs = live?.eventAt ? now - new Date(live.eventAt).getTime() : null;
   const isLive = lastAdvanceAt !== null && now - lastAdvanceAt < IDLE_AFTER_MS;
+  const state = isLive ? `live · ledger moved ${ago(now - lastAdvanceAt)}` : `idle · ledger last moved ${ago(eventMs)}`;
+  const seq = live?.seq !== null && live?.seq !== undefined ? Number(live.seq).toLocaleString() : null;
 
   return (
-    <span className={`inline-flex items-center text-xs ${className}`}>
-      <span className="relative flex w-2 h-2 mr-1.5 shrink-0">
+    <span
+      className={`inline-flex items-center text-xs ${className}`}
+      title={compact ? `${state}${seq ? ` · seq ${seq}` : ''}` : undefined}
+      aria-label={compact ? `Core ${state}` : undefined}
+    >
+      <span className="relative flex w-2 h-2 mr-1.5 shrink-0" aria-hidden="true">
         {isLive && (
-          <span className="animate-ping absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-75" />
+          <span className="motion-safe:animate-ping absolute inline-flex w-full h-full rounded-full bg-live opacity-75" />
         )}
-        <span
-          className={`relative inline-flex w-2 h-2 rounded-full ${
-            isLive ? 'bg-green-500' : 'bg-slate-300'
-          }`}
-        />
+        <span className={`relative inline-flex w-2 h-2 rounded-full ${isLive ? 'bg-live' : 'bg-never'}`} />
       </span>
-      {isLive ? (
-        <span className="text-green-700">
-          live · event {ago(now - lastAdvanceAt)}
-        </span>
+      {compact ? (
+        <span className={isLive ? 'text-[#067647]' : 'text-ink-muted'}>{isLive ? 'live' : 'idle'}</span>
       ) : (
-        <span className="text-slate-500">
-          {/* Names the last real event, so "quiet" and "dead" are separable. */}
-          idle · last event {ago(eventMs)}
-        </span>
-      )}
-      {polledAt && (
-        <span className="text-slate-400 ml-1.5">· checked {ago(now - polledAt)}</span>
-      )}
-      {live?.seq !== null && live?.seq !== undefined && (
-        <span className="text-slate-400 ml-1.5 font-mono">seq {String(live.seq)}</span>
+        <>
+          <span className={isLive ? 'text-[#067647]' : 'text-ink-muted'}>{state}</span>
+          {polledAt && <span className="text-ink-soft ml-1.5">· checked {ago(now - polledAt)}</span>}
+          {seq && <span className="text-ink-soft ml-1.5">· seq {seq}</span>}
+        </>
       )}
     </span>
   );

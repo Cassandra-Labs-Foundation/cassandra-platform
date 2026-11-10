@@ -22,3 +22,6 @@ core/supabase/.temp/
 
 # Node deps (the architecture explorer E2E harness)
 node_modules/
+
+# Impeccable runtime cache (shared artifacts like design.json and surfaces/ are committed)
+.impeccable/hook.cache.json

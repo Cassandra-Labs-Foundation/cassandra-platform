@@ -9,9 +9,9 @@ import React from "react";
 
 // Evidence worlds, in the app's palette. Kept as hex so the inline SVG bars can
 // reference them directly without a CSS-var round trip.
-export const CORE_FILL = "#2563eb"; // blue-600 — production
-export const SIM_FILL = "#8b5cf6"; // violet-500 — simulated drills
-const NIL_FILL = "#e2e8f0"; // slate-200 — an empty bucket
+export const CORE_FILL = "#1f5eff"; // --color-accent — production
+export const SIM_FILL = "#8a96ab"; // --color-sim — simulated drills
+const NIL_FILL = "#e6ebf2"; // --color-line — an empty bucket
 
 /** Integer with thousands separators, nulls as 0. */
 export const n = (x) => (x ?? 0).toLocaleString();
@@ -59,12 +59,12 @@ export function Swatch({ fill }) {
  */
 export function StatusDot({ pulse }) {
   if (pulse.total > 0) {
-    return <span title="evidence in window" className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]" />;
+    return <span title="evidence in window" className="inline-block w-2.5 h-2.5 rounded-full bg-live" />;
   }
   if (pulse.everTotal > 0) {
-    return <span title="has history, silent in this window" className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" />;
+    return <span title="has history, silent in this window" className="inline-block w-2.5 h-2.5 rounded-full bg-silent" />;
   }
-  return <span title="no evidence ever" className="inline-block w-2.5 h-2.5 rounded-full bg-slate-300" />;
+  return <span title="no evidence ever" className="inline-block w-2.5 h-2.5 rounded-full bg-never" />;
 }
 
 /** hermetic / live control-test verdicts, or a "scoped out" note. */

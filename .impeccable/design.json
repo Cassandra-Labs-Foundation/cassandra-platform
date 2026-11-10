@@ -1,0 +1,714 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-10T04:15:41+00:00",
+  "title": "Design System: Cassandra staff console",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "tonalRamp": [
+          "#0a1f5c",
+          "#0f2f8f",
+          "#1749d6",
+          "#1f5eff",
+          "#4d7fff",
+          "#8fadff",
+          "#d4e0ff",
+          "#edf3ff"
+        ],
+        "canonical": "var(--color-accent) in ui/src/styles/globals.css @theme"
+      },
+      "accent-deep": {
+        "role": "primary",
+        "displayName": "Signal Blue Deep",
+        "tonalRamp": [
+          "#0a1f5c",
+          "#0f2f8f",
+          "#1749d6",
+          "#1f5eff",
+          "#4d7fff",
+          "#8fadff",
+          "#d4e0ff",
+          "#edf3ff"
+        ],
+        "canonical": "var(--color-accent-deep) in ui/src/styles/globals.css @theme"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Harbor Navy Ink",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-ink) in ui/src/styles/globals.css @theme"
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Slate Navy",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-ink-muted) in ui/src/styles/globals.css @theme"
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Soft Slate Navy",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-ink-soft) in ui/src/styles/globals.css @theme"
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Cool Canvas",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-canvas) in ui/src/styles/globals.css @theme"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "tonalRamp": [
+          "#ffffff"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Frost Line",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-line) in ui/src/styles/globals.css @theme"
+      },
+      "search-well": {
+        "role": "neutral",
+        "displayName": "Search Well",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Night Rail",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-rail) in ui/src/styles/globals.css @theme"
+      },
+      "rail-deep": {
+        "role": "neutral",
+        "displayName": "Rail Deep",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "rail-text": {
+        "role": "neutral",
+        "displayName": "Rail Text",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-rail-text) in ui/src/styles/globals.css @theme"
+      },
+      "rail-muted": {
+        "role": "neutral",
+        "displayName": "Rail Muted",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-rail-muted) in ui/src/styles/globals.css @theme"
+      },
+      "rail-subtext": {
+        "role": "neutral",
+        "displayName": "Rail Subtext",
+        "tonalRamp": [
+          "#0a1c36",
+          "#0b1f3a",
+          "#0d2342",
+          "#4a5870",
+          "#56637a",
+          "#8ea2c0",
+          "#c9d5e6",
+          "#edf1f6"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "live": {
+        "role": "evidence",
+        "displayName": "Live Green",
+        "tonalRamp": [
+          "#053321",
+          "#074d31",
+          "#067647",
+          "#12b76a",
+          "#47cd89",
+          "#a6f4c5",
+          "#dcfae6",
+          "#ecfdf3"
+        ],
+        "canonical": "var(--color-live) in ui/src/styles/globals.css @theme"
+      },
+      "silent": {
+        "role": "evidence",
+        "displayName": "Silent Amber",
+        "tonalRamp": [
+          "#3d1a05",
+          "#5c2a0a",
+          "#93370d",
+          "#dc6803",
+          "#f79009",
+          "#f6dfb4",
+          "#fef0c7",
+          "#fff8ec"
+        ],
+        "canonical": "var(--color-silent) in ui/src/styles/globals.css @theme"
+      },
+      "never": {
+        "role": "evidence",
+        "displayName": "Never Grey",
+        "tonalRamp": [
+          "#2c3546",
+          "#4a5870",
+          "#6b778c",
+          "#8a96ab",
+          "#a3adbe",
+          "#b8c2d1",
+          "#d6dce6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-never) in ui/src/styles/globals.css @theme"
+      },
+      "sim": {
+        "role": "evidence",
+        "displayName": "Drill Grey",
+        "tonalRamp": [
+          "#2c3546",
+          "#4a5870",
+          "#6b778c",
+          "#8a96ab",
+          "#a3adbe",
+          "#b8c2d1",
+          "#d6dce6",
+          "#edf1f6"
+        ],
+        "canonical": "var(--color-sim) in ui/src/styles/globals.css @theme"
+      },
+      "ok-wash": {
+        "role": "state",
+        "displayName": "OK Wash",
+        "tonalRamp": [
+          "#053321",
+          "#074d31",
+          "#067647",
+          "#12b76a",
+          "#47cd89",
+          "#a6f4c5",
+          "#dcfae6",
+          "#ecfdf3"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "ok-ink": {
+        "role": "state",
+        "displayName": "OK Ink",
+        "tonalRamp": [
+          "#053321",
+          "#074d31",
+          "#067647",
+          "#12b76a",
+          "#47cd89",
+          "#a6f4c5",
+          "#dcfae6",
+          "#ecfdf3"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "warn-wash": {
+        "role": "state",
+        "displayName": "Warning Wash",
+        "tonalRamp": [
+          "#3d1a05",
+          "#5c2a0a",
+          "#93370d",
+          "#dc6803",
+          "#f79009",
+          "#f6dfb4",
+          "#fef0c7",
+          "#fff8ec"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "warn-ink": {
+        "role": "state",
+        "displayName": "Warning Ink",
+        "tonalRamp": [
+          "#3d1a05",
+          "#5c2a0a",
+          "#93370d",
+          "#dc6803",
+          "#f79009",
+          "#f6dfb4",
+          "#fef0c7",
+          "#fff8ec"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "attention-wash": {
+        "role": "state",
+        "displayName": "Attention Wash",
+        "tonalRamp": [
+          "#3d1a05",
+          "#5c2a0a",
+          "#93370d",
+          "#dc6803",
+          "#f79009",
+          "#f6dfb4",
+          "#fef0c7",
+          "#fff8ec"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "attention-line": {
+        "role": "state",
+        "displayName": "Attention Ring",
+        "tonalRamp": [
+          "#3d1a05",
+          "#5c2a0a",
+          "#93370d",
+          "#dc6803",
+          "#f79009",
+          "#f6dfb4",
+          "#fef0c7",
+          "#fff8ec"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "bad-wash": {
+        "role": "state",
+        "displayName": "Bad Wash",
+        "tonalRamp": [
+          "#55160c",
+          "#912018",
+          "#b42318",
+          "#d92d20",
+          "#f04438",
+          "#fda29b",
+          "#fee4e2",
+          "#fef3f2"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "bad-ink": {
+        "role": "state",
+        "displayName": "Bad Ink",
+        "tonalRamp": [
+          "#55160c",
+          "#912018",
+          "#b42318",
+          "#d92d20",
+          "#f04438",
+          "#fda29b",
+          "#fee4e2",
+          "#fef3f2"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "error-wash": {
+        "role": "state",
+        "displayName": "Error Wash",
+        "tonalRamp": [
+          "#55160c",
+          "#912018",
+          "#b42318",
+          "#d92d20",
+          "#f04438",
+          "#fda29b",
+          "#fee4e2",
+          "#fef3f2"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "error-ink": {
+        "role": "state",
+        "displayName": "Error Ink",
+        "tonalRamp": [
+          "#55160c",
+          "#912018",
+          "#b42318",
+          "#d92d20",
+          "#f04438",
+          "#fda29b",
+          "#fee4e2",
+          "#fef3f2"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "alert-dot": {
+        "role": "state",
+        "displayName": "Alert Dot",
+        "tonalRamp": [
+          "#55160c",
+          "#912018",
+          "#b42318",
+          "#d92d20",
+          "#f04438",
+          "#fda29b",
+          "#fee4e2",
+          "#fef3f2"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      },
+      "demo-text": {
+        "role": "state",
+        "displayName": "Demo Text",
+        "tonalRamp": [
+          "#3d1a05",
+          "#5c2a0a",
+          "#93370d",
+          "#dc6803",
+          "#f79009",
+          "#f6dfb4",
+          "#fef0c7",
+          "#fff8ec"
+        ],
+        "canonical": "literal hex in component classes (not yet a @theme variable)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "KPI headline figures, tabular."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The page title, one per page."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Search, banners, notifications, subtitles."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "The composition line under figures; card metadata."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Sentence-case KPI labels."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Pills, timestamps, footnotes, nav groups, heartbeat; the 12px floor."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Event codes and IDs only (JetBrains Mono)."
+      }
+    },
+    "shadows": [
+      {
+        "name": "e1",
+        "value": "0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08)",
+        "purpose": "Every resting card, chip button, heartbeat pill; the container edge."
+      },
+      {
+        "name": "e2",
+        "value": "0 0 0 1px rgb(11 31 58 / 0.05), 0 2px 4px rgb(11 31 58 / 0.06), 0 14px 28px -8px rgb(11 31 58 / 0.22)",
+        "purpose": "Hovered cards and chip buttons; popovers."
+      },
+      {
+        "name": "chip",
+        "value": "0 1px 2px rgb(0 0 0 / 0.3), 0 6px 14px -4px rgb(0 0 0 / 0.5)",
+        "purpose": "The white active nav item on the dark rail."
+      },
+      {
+        "name": "well-inset",
+        "value": "inset 0 1px 2px rgb(11 31 58 / 0.08)",
+        "purpose": "The search field (0.15 on the coverage bar track)."
+      },
+      {
+        "name": "rail-lift",
+        "value": "inset -1px 0 0 rgb(255 255 255 / 0.04), 6px 0 18px -10px rgb(11 31 58 / 0.5)",
+        "purpose": "Separates the navy rail from the canvas."
+      },
+      {
+        "name": "attention-ring",
+        "value": "0 0 0 1px #f6dfb4, 0 4px 12px -4px rgb(147 55 13 / 0.18)",
+        "purpose": "The attention banner."
+      }
+    ],
+    "motion": [
+      {
+        "name": "nav-color",
+        "value": "150ms ease (transition-colors)",
+        "purpose": "Nav item hover."
+      },
+      {
+        "name": "card-lift",
+        "value": "200ms; box-shadow e1 to e2 plus translateY(-2px) under motion-safe",
+        "purpose": "Linked card hover."
+      },
+      {
+        "name": "heartbeat-ping",
+        "value": "Tailwind animate-ping, motion-safe only",
+        "purpose": "Live heartbeat dot while the ledger is moving."
+      },
+      {
+        "name": "skeleton-pulse",
+        "value": "Tailwind animate-pulse on Cool Canvas blocks",
+        "purpose": "Loading placeholders shaped like the real cards."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Chip Button",
+      "kind": "button",
+      "refersTo": "button-chip",
+      "description": "White card-styled page action (Obligations, Control results); raises to e2 on hover.",
+      "html": "<a class=\"ds-chip-btn\" href=\"#\">Obligations</a> <a class=\"ds-chip-btn\" href=\"#\">Control results</a>",
+      "css": ".ds-chip-btn{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); display:inline-block;background:#fff;color:#0b1f3a;border-radius:12px;padding:6px 12px;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08);transition:box-shadow .15s} .ds-chip-btn:hover{box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 2px 4px rgb(11 31 58 / 0.06), 0 14px 28px -8px rgb(11 31 58 / 0.22)} .ds-chip-btn:focus-visible{outline:2px solid #1f5eff;outline-offset:2px}"
+    },
+    {
+      "name": "Accent Chip Button",
+      "kind": "button",
+      "refersTo": "button-chip-accent",
+      "description": "Full-width white button with Signal Blue text (Show all N policies).",
+      "html": "<button class=\"ds-chip-accent\" type=\"button\">Show all 27 policies</button>",
+      "css": ".ds-chip-accent{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); width:320px;background:#fff;color:#1f5eff;border:none;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08);transition:box-shadow .15s} .ds-chip-accent:hover{box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 2px 4px rgb(11 31 58 / 0.06), 0 14px 28px -8px rgb(11 31 58 / 0.22)} .ds-chip-accent:focus-visible{outline:2px solid #1f5eff;outline-offset:2px}"
+    },
+    {
+      "name": "Member Search",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Header search on a pressed well; runs on Enter.",
+      "html": "<label class=\"ds-search\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#56637a\" stroke-width=\"2\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input aria-label=\"Find a member\" placeholder=\"Find a member\"></label>",
+      "css": ".ds-search{position:relative;display:block;max-width:448px} .ds-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%)} .ds-search input{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); width:100%;box-sizing:border-box;background:#f1f4f8;border:none;border-radius:8px;padding:8px 16px 8px 40px;font-size:14px;color:#0b1f3a;box-shadow:inset 0 1px 2px rgb(11 31 58 / 0.08)} .ds-search input::placeholder{color:#56637a} .ds-search input:focus{outline:none;box-shadow:0 0 0 2px #1f5eff}"
+    },
+    {
+      "name": "Navy Rail Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Grouped rail nav; the active item is a raised white chip with a blue icon.",
+      "html": "<nav class=\"ds-rail\"><div class=\"ds-rail-group\">Compliance</div><a class=\"ds-nav-item is-active\" aria-current=\"page\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg>Monitoring</a><a class=\"ds-nav-item\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 11 3 3L22 4\"/><path d=\"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11\"/></svg>Approvals</a></nav>",
+      "css": ".ds-rail{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); width:224px;padding:12px;background:linear-gradient(#0d2342,#0a1c36)} .ds-rail-group{padding:12px 10px 6px;font-size:12px;font-weight:600;color:#8ea2c0} .ds-nav-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:14px;font-weight:500;color:#c9d5e6;cursor:pointer;margin-bottom:1px;transition:background-color .15s,color .15s} .ds-nav-item svg{color:#8ea2c0} .ds-nav-item:hover{background:rgb(255 255 255 / 0.06);color:#fff} .ds-nav-item.is-active{background:#fff;color:#0b1f3a;font-weight:600;box-shadow:0 1px 2px rgb(0 0 0 / 0.3), 0 6px 14px -4px rgb(0 0 0 / 0.5)} .ds-nav-item.is-active svg{color:#1f5eff} .ds-nav-item:focus-visible{outline:2px solid #1f5eff;outline-offset:2px}"
+    },
+    {
+      "name": "Status Pills",
+      "kind": "chip",
+      "refersTo": "pill-ok",
+      "description": "Policy status from control counts: wash plus ink of one hue.",
+      "html": "<span class=\"ds-pill ds-ok\">Healthy</span> <span class=\"ds-pill ds-warn\">Gaps</span> <span class=\"ds-pill ds-bad\">No evidence</span> <span class=\"ds-pill ds-neutral\">No controls</span>",
+      "css": ".ds-pill{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); display:inline-block;white-space:nowrap;border-radius:9999px;padding:2px 8px;font-size:12px;font-weight:600} .ds-ok{background:#dcfae6;color:#067647} .ds-warn{background:#fef0c7;color:#93370d} .ds-bad{background:#fee4e2;color:#b42318} .ds-neutral{background:#edf1f6;color:#4a5870}"
+    },
+    {
+      "name": "KPI Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Label, bold tabular figure, plain-language composition line, and a live/silent/never bar.",
+      "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-l\">Controls with evidence</div><div class=\"ds-kpi-v\">189 <span>of 339</span></div><div class=\"ds-bar\"><i style=\"width:56%;background:#12b76a\"></i><i style=\"width:36%;background:#f79009\"></i><i style=\"width:8%;background:#b8c2d1\"></i></div><div class=\"ds-kpi-s\">189 live · 123 silent · 27 never fired</div></div>",
+      "css": ".ds-kpi{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); width:300px;background:#fff;border-radius:12px;padding:16px;box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08);color:#0b1f3a;font-variant-numeric:tabular-nums} .ds-kpi-l{font-size:13px;font-weight:600;color:#4a5870} .ds-kpi-v{font-size:30px;font-weight:700;letter-spacing:-0.025em;line-height:1.25} .ds-kpi-v span{font-size:15px;font-weight:500;color:#56637a} .ds-bar{display:flex;height:10px;border-radius:9999px;overflow:hidden;margin:12px 0;background:#edf1f6;box-shadow:inset 0 1px 2px rgb(11 31 58 / 0.15)} .ds-bar i{display:block} .ds-kpi-s{font-size:13px;color:#4a5870}"
+    },
+    {
+      "name": "Policy Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Linked policy summary; lifts from e1 to e2 on hover.",
+      "html": "<a class=\"ds-policy\" href=\"#\"><div class=\"ds-policy-h\"><span>Business Continuity</span><em>Mostly silent</em></div><div class=\"ds-pbar\"><i style=\"width:13%;background:#12b76a\"></i><i style=\"width:80%;background:#f79009\"></i><i style=\"width:7%;background:#b8c2d1\"></i></div><div class=\"ds-policy-m\">2 live · 12 silent · 1 never · 15 controls</div><div class=\"ds-policy-f\">Events · 7d <b>150</b></div></a>",
+      "css": ".ds-policy{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); display:block;width:260px;background:#fff;border-radius:12px;padding:16px;box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08);color:#0b1f3a;text-decoration:none;font-variant-numeric:tabular-nums;transition:box-shadow .2s,transform .2s} .ds-policy:hover{box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 2px 4px rgb(11 31 58 / 0.06), 0 14px 28px -8px rgb(11 31 58 / 0.22);transform:translateY(-2px)} .ds-policy:focus-visible{outline:2px solid #1f5eff;outline-offset:2px} .ds-policy-h{display:flex;justify-content:space-between;gap:8px;font-size:15px;font-weight:600} .ds-policy-h em{font-style:normal;white-space:nowrap;border-radius:9999px;padding:2px 8px;font-size:12px;background:#fee4e2;color:#b42318;align-self:flex-start} .ds-pbar{display:flex;height:6px;border-radius:9999px;overflow:hidden;margin:12px 0 8px;background:#edf1f6} .ds-pbar i{display:block} .ds-policy-m{font-size:13px;color:#4a5870} .ds-policy-f{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:1px solid #e6ebf2;font-size:13px;color:#4a5870} .ds-policy-f b{font-size:16px;color:#0b1f3a}"
+    },
+    {
+      "name": "Live Heartbeat Pill",
+      "kind": "custom",
+      "refersTo": "live-badge",
+      "description": "Header heartbeat: live (pulsing green), idle (still grey), or no beat (amber).",
+      "html": "<span class=\"ds-beat\"><i class=\"ds-dot\"><b></b></i><span class=\"ds-live\">live · ledger moved 3m ago</span><span class=\"ds-meta\">· checked 4s ago · seq 1,940,736</span></span> <span class=\"ds-beat\"><i class=\"ds-dot ds-idle\"></i><span class=\"ds-muted\">idle · ledger last moved 14h ago</span></span>",
+      "css": ".ds-beat{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); display:inline-flex;align-items:center;background:#fff;border-radius:9999px;padding:4px 12px;font-size:12px;box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08)} .ds-dot{position:relative;display:inline-flex;width:8px;height:8px;margin-right:6px;border-radius:9999px;background:#12b76a} .ds-dot b{position:absolute;inset:0;border-radius:9999px;background:#12b76a;opacity:.75;animation:ds-ping 1s cubic-bezier(0,0,.2,1) infinite} .ds-dot.ds-idle{background:#b8c2d1} .ds-live{color:#067647} .ds-muted{color:#4a5870} .ds-meta{color:#56637a;margin-left:6px} @keyframes ds-ping{75%,100%{transform:scale(2);opacity:0}} @media (prefers-reduced-motion: reduce){.ds-dot b{animation:none;opacity:0}}"
+    },
+    {
+      "name": "Attention Banner",
+      "kind": "custom",
+      "refersTo": "attention-banner",
+      "description": "One sentence naming policies with no or mostly silent evidence, each linked.",
+      "html": "<div class=\"ds-attn\" role=\"status\"><span class=\"ds-attn-i\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg></span><p><b>2 policies need attention.</b> <a href=\"#\">Capitalization</a> has no evidence this week.</p></div>",
+      "css": ".ds-attn{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); display:flex;align-items:center;gap:12px;max-width:640px;background:#fff8ec;border-radius:12px;padding:12px 16px;box-shadow:0 0 0 1px #f6dfb4,0 4px 12px -4px rgb(147 55 13 / 0.18)} .ds-attn-i{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#fdecc8;color:#93370d;flex-shrink:0} .ds-attn p{margin:0;font-size:14px;color:#5c2a0a} .ds-attn b{color:#3d1a05} .ds-attn a{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:2px;text-decoration-color:#e0b36b} .ds-attn a:hover{text-decoration-color:#93370d} .ds-attn a:focus-visible{outline:2px solid #1f5eff;outline-offset:2px}"
+    },
+    {
+      "name": "Latest Event Row",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Event code in mono, its control, age; blue dot for production, grey for drills.",
+      "html": "<ul class=\"ds-events\"><li><i style=\"background:#8a96ab\"></i><div><div class=\"ds-code\">escalation.routed</div><div class=\"ds-ctl\">BSA-14 · Escalation Pathway</div><div class=\"ds-row\"><span>86m ago · drill</span><a href=\"#\">Open control</a></div></div></li><li><i style=\"background:#1f5eff\"></i><div><div class=\"ds-code\">entity.created</div><div class=\"ds-ctl\">PR-01 · Privacy Notice Lifecycle</div><div class=\"ds-row\"><span>2d ago</span><a href=\"#\">Open control</a></div></div></li></ul>",
+      "css": ".ds-events{font-family: var(--font-sans, 'Source Sans 3', ui-sans-serif, system-ui, sans-serif); list-style:none;margin:0;padding:0;width:340px;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgb(11 31 58 / 0.05), 0 1px 2px rgb(11 31 58 / 0.06), 0 4px 12px -2px rgb(11 31 58 / 0.08);overflow:hidden} .ds-events li{display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid #e6ebf2} .ds-events li:last-child{border-bottom:0} .ds-events i{width:8px;height:8px;border-radius:9999px;margin-top:6px;flex-shrink:0} .ds-events li>div{flex:1;min-width:0} .ds-code{font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); font-size:13px;font-weight:500;color:#0b1f3a} .ds-ctl{font-size:12px;color:#4a5870;margin-top:2px} .ds-row{display:flex;justify-content:space-between;font-size:12px;color:#56637a;margin-top:4px} .ds-row a{font-weight:600;color:#1f5eff;text-decoration:none} .ds-row a:hover{text-decoration:underline} .ds-row a:focus-visible{outline:2px solid #1f5eff;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Category Standard, at Full Craft",
+    "overview": "The console is a conventional fintech dashboard executed carefully: a deep navy rail on the left, a cool grey-blue canvas, and white cards that float on soft, navy-tinted shadows instead of sitting inside borders. One saturated blue means \"act here\", \"you are here\" and \"this is production evidence\". Green, amber and grey mean live, silent and never fired, and they mean nothing else. The quality bar is Mercury for restraint and Stripe Dashboard for dense financial data and status vocabulary. It must never read as a legacy core (dense grey screens, tiny type) or as a compliance binder.\n\nDensity is medium. Figures lead, set large and bold with tabular numerals; every figure carries a plain-language line underneath that says what it counts and where it came from. Honesty is part of the look: simulated drills are drawn in their own grey and counted separately, the demo core is badged in the rail on every page, and a heartbeat that has stopped says \"idle\" instead of pulsing.\n\n**Scope of this record.** The system is implemented on the application shell (rail, header, search, bell, page title; every page inherits it) and on the Compliance Monitoring overview (`/compliance/dashboard`). The policy and control detail pages, the shared compliance atoms (`Panel`, badges, tables) and the inner panels of the other pages still carry the previous slate styling and are pending migration. New work follows this document, not those panels.\n\n**Previous baseline (\"The Default Back Office\", recorded earlier on 2026-11-10).** Before this build the console was stock Tailwind v4: Arial forced in globals.css, slate neutrals (canvas #f8fafc, ink #1d293d, a #90a1b9 grey that failed contrast), a white sidebar with \"Ledger Blue\" (#155dfc) active text on a pale wash, flat white panels separated by 1px #e2e8f0 hairlines, radii drifting between 6, 8, 12 and 16px, and 10–11px uppercase labels in about 60 places. What changed: Source Sans 3 and JetBrains Mono replace Arial and the system mono; a navy rail with grouped navigation and a raised white active chip replaces the white sidebar; shadow elevation replaces hairline borders as the container edge; the accent moves to #1f5eff; the neutral ramp becomes navy-tinted and every reading grey passes AA; the live/silent/never palette and the production/drill split become first-class tokens; the dark-mode variables that flipped the body without the components were removed (light only).",
+    "keyCharacteristics": [
+      "Navy rail, cool canvas, white cards: three planes, always in that order.",
+      "Containers are lifted by layered navy-tinted shadows, never outlined.",
+      "One accent hue for action, selection, links and production evidence.",
+      "Live / silent / never in green / amber / grey; simulated drills in their own grey.",
+      "Source Sans 3 with tabular figures; JetBrains Mono only for event codes and IDs.",
+      "Nothing below 12px; secondary text at 13px, not smaller.",
+      "Demo data, drills and stale feeds are labeled where they appear."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Signal Blue is the only hue that means act here, you are here, or production. Evidence and state colors never decorate.",
+        "section": "colors"
+      },
+      {
+        "name": "The Drill Is Grey Rule",
+        "body": "Simulated-drill evidence is always Drill Grey and always counted separately from production (\"9,543 production · 2 simulated drills\"). A drill is never drawn in the accent and never folded silently into a total.",
+        "section": "colors"
+      },
+      {
+        "name": "The Readable Grey Rule",
+        "body": "Text a user must read is Soft Slate Navy (#56637a) or darker on light grounds. Never Grey and Drill Grey are for marks, bars and dots, not words.",
+        "section": "colors"
+      },
+      {
+        "name": "The Twelve-Pixel Floor Rule",
+        "body": "No text below 12px. Secondary information steps down to 13px or 12px, never to 10 or 11.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "`font-variant-numeric: tabular-nums` is set on the body, so every count, amount and percentage aligns in columns without per-element opt-in.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Means Machine Rule",
+        "body": "JetBrains Mono is used only for strings a machine emitted (event codes, IDs). Names, labels and numbers stay in Source Sans 3.",
+        "section": "typography"
+      },
+      {
+        "name": "The Shadow Is the Edge Rule",
+        "body": "A container is separated from the canvas by e1, never by a border. Hairlines live only inside a container, between its rows.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Navy Shadow Rule",
+        "body": "Shadows on light grounds are tinted with Harbor Navy Ink (rgb 11 31 58), not black. Only the active nav chip, which sits on the dark rail, uses a black shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the three planes in order: navy rail, Cool Canvas (#edf1f6), white cards.",
+      "Do lift containers with e1 and raise them with e2 on hover; use Frost Line (#e6ebf2) only between rows inside a container.",
+      "Do reserve Signal Blue (#1f5eff) for action, selection, links, focus and production evidence.",
+      "Do use Live Green, Silent Amber and Never Grey only for live / silent / never, and Drill Grey (#8a96ab) only for simulated drills.",
+      "Do break drills out of every total that includes them, and label demo data and stale feeds where they appear.",
+      "Do put a plain-language line under every headline figure saying what it counts.",
+      "Do keep all text at 12px or larger, readable text at #56637a or darker, and figures tabular.",
+      "Do gate decorative motion (lift on hover, heartbeat ping) behind reduced-motion preferences."
+    ],
+    "donts": [
+      "Don't outline cards or panels with borders, or reintroduce the slate-era `border-slate-200` panels.",
+      "Don't use black shadows on light grounds; tint them navy.",
+      "Don't set labels in small uppercase with letter-spacing; label in sentence case at 12–13px semibold.",
+      "Don't use JetBrains Mono for names or numbers.",
+      "Don't add new hues for decoration or new radii beyond the 12 / 8 / 6px set and full rounds.",
+      "Don't show a pulsing \"live\" mark when the source has not moved; use the idle state.",
+      "Don't use `text-[10px]` or `text-[11px]`."
+    ]
+  }
+}
