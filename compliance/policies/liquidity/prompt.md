@@ -87,7 +87,7 @@ Governance of these controls is centralized with the Chief Compliance Officer, w
 - Physical cash and vault operations — see Cash Policy.
 - Enterprise-wide risk appetite governance beyond liquidity — see Enterprise Risk Management Policy.
 - Business continuity and operational resilience — see Business Continuity Plan.
-- OCC/FDIC liquidity materials — excluded; scope is NCUA-only for federally insured credit unions.
+- OCC/FDIC liquidity materials — excluded; scope follows NCUA standards, applied voluntarily (Pynthia is a proposed California state-chartered credit union that intends private share insurance through American Share Insurance).
 
 ## 5. System Design Notes
 
