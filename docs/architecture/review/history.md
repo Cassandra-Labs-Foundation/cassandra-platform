@@ -8,3 +8,4 @@ One row per weekly review, appended by `.github/workflows/architecture-review.ym
 | 2026-11-02 | 776c53b | 12/12 | none | table/core.account · 3551px |
 | 2026-11-09 | 439d331 | 12/12 | none | table/core.account · 3551px |
 | 2026-11-16 | 3f3f687 | 12/12 | none | table/core.account · 3551px |
+| 2026-11-24 | bca196e | 12/12 | none | table/core.account · 3551px |
